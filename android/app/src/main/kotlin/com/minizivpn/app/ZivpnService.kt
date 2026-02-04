@@ -99,10 +99,12 @@ class ZivpnService : VpnService() {
         val mtu = prefs.getInt("mtu", 1500)
         val autoTuning = prefs.getBoolean("auto_tuning", true)
         val bufferSize = prefs.getString("buffer_size", "4m") ?: "4m"
+        val logLevel = prefs.getString("log_level", "info") ?: "info"
+        val coreCount = prefs.getInt("core_count", 4)
 
         // 1. START HYSTERIA & LOAD BALANCER
         try {
-            startCores(ip, range, pass, obfs, multiplier.toDouble())
+            startCores(ip, range, pass, obfs, multiplier.toDouble(), coreCount)
         } catch (e: Exception) {
             Log.e("ZIVPN-Tun", "Failed to start cores: ${e.message}")
             stopSelf()
@@ -170,12 +172,12 @@ class ZivpnService : VpnService() {
                 try {
                     val udpTimeout = 60000L
                     val finalMtu = mtu.toLong()
-                    logToApp("Starting Engine: MTU=$finalMtu, Buf=$bufferSize, AutoTune=$autoTuning")
+                    logToApp("Starting Engine: MTU=$finalMtu, Buf=$bufferSize, AutoTune=$autoTuning, Log=$logLevel")
                     mobile.Mobile.setLogHandler(tunLogger)
                     mobile.Mobile.start(
                         "socks5://127.0.0.1:7777",
                         "fd://$fd",
-                        "debug",
+                        logLevel,
                         finalMtu,
                         udpTimeout,
                         bufferSize, 
@@ -196,7 +198,7 @@ class ZivpnService : VpnService() {
         }
     }
 
-    private fun startCores(ip: String, range: String, pass: String, obfs: String, multiplier: Double) {
+    private fun startCores(ip: String, range: String, pass: String, obfs: String, multiplier: Double, coreCount: Int) {
         val libDir = applicationInfo.nativeLibraryDir
         val libUz = File(libDir, "libuz.so").absolutePath
         val libLoad = File(libDir, "libload.so").absolutePath
@@ -206,7 +208,7 @@ class ZivpnService : VpnService() {
         val dynamicConn = (baseConn * multiplier).toInt()
         val dynamicWin = (baseWin * multiplier).toInt()
         
-        val ports = listOf(20080, 20081, 20082, 20083)
+        val ports = (0 until coreCount).map { 20080 + it }
         val tunnelTargets = mutableListOf<String>()
 
         for (port in ports) {

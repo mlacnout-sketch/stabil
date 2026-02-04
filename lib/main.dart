@@ -146,7 +146,9 @@ class _HomePageState extends State<HomePage> {
           "udp_mode": "udp",
           "mtu": int.tryParse(prefs.getString('mtu') ?? "1500") ?? 1500,
           "auto_tuning": prefs.getBool('auto_tuning') ?? true,
-          "buffer_size": prefs.getString('buffer_size') ?? "4m"
+          "buffer_size": prefs.getString('buffer_size') ?? "4m",
+          "log_level": prefs.getString('log_level') ?? "info",
+          "core_count": (prefs.getInt('core_count') ?? 4)
         });
         await platform.invokeMethod('startVpn');
         setState(() => _isRunning = true);
@@ -481,6 +483,8 @@ class _SettingsTabState extends State<SettingsTab> {
   
   bool _autoTuning = true;
   String _bufferSize = "4m";
+  String _logLevel = "info";
+  double _coreCount = 4.0;
 
   @override
   void initState() {
@@ -497,6 +501,8 @@ class _SettingsTabState extends State<SettingsTab> {
       _mtuCtrl.text = prefs.getString('mtu') ?? "1500";
       _autoTuning = prefs.getBool('auto_tuning') ?? true;
       _bufferSize = prefs.getString('buffer_size') ?? "4m";
+      _logLevel = prefs.getString('log_level') ?? "info";
+      _coreCount = (prefs.getInt('core_count') ?? 4).toDouble();
     });
   }
 
@@ -508,6 +514,8 @@ class _SettingsTabState extends State<SettingsTab> {
     await prefs.setString('mtu', _mtuCtrl.text);
     await prefs.setBool('auto_tuning', _autoTuning);
     await prefs.setString('buffer_size', _bufferSize);
+    await prefs.setString('log_level', _logLevel);
+    await prefs.setInt('core_count', _coreCount.toInt());
     if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Settings Saved")));
   }
 
@@ -535,6 +543,28 @@ class _SettingsTabState extends State<SettingsTab> {
               children: [
                 _buildInput(_mtuCtrl, "MTU (Default: 1500)", Icons.settings_ethernet),
                 const SizedBox(height: 15),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text("Hysteria Cores: ${_coreCount.toInt()}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                    Slider(
+                      value: _coreCount,
+                      min: 1,
+                      max: 8,
+                      divisions: 7,
+                      label: "${_coreCount.toInt()} Cores",
+                      onChanged: (val) => setState(() => _coreCount = val),
+                    ),
+                    const Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text("More cores = Higher speed but more battery usage", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    ),
+                  ],
+                ),
+                const Divider(),
                 SwitchListTile(
                   title: const Text("TCP Auto Tuning"),
                   subtitle: const Text("Dynamic buffer sizing for stability"),
@@ -554,6 +584,20 @@ class _SettingsTabState extends State<SettingsTab> {
                       DropdownMenuItem(value: "8m", child: Text("8 MB")),
                     ],
                     onChanged: (val) => setState(() => _bufferSize = val!),
+                  ),
+                ),
+                ListTile(
+                  title: const Text("Log Level"),
+                  subtitle: const Text("Verbosity of logs"),
+                  trailing: DropdownButton<String>(
+                    value: _logLevel,
+                    items: const [
+                      DropdownMenuItem(value: "debug", child: Text("Debug (Verbose)")),
+                      DropdownMenuItem(value: "info", child: Text("Info (Standard)")),
+                      DropdownMenuItem(value: "error", child: Text("Error (Minimal)")),
+                      DropdownMenuItem(value: "silent", child: Text("Silent (None)")),
+                    ],
+                    onChanged: (val) => setState(() => _logLevel = val!),
                   ),
                 )
               ],
