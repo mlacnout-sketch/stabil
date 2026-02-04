@@ -89,7 +89,11 @@ class MainActivity: FlutterActivity() {
                 val obfs = call.argument<String>("obfs") ?: "hu``hqb`c"
                 val multiplier = call.argument<Double>("recv_window_multiplier") ?: 1.0
                 val udpMode = call.argument<String>("udp_mode") ?: "tcp"
-                val mtu = call.argument<Int>("mtu") ?: 1280
+                
+                // Advanced Settings
+                val mtu = call.argument<Int>("mtu") ?: 1500
+                val autoTuning = call.argument<Boolean>("auto_tuning") ?: true
+                val bufferSize = call.argument<String>("buffer_size") ?: "4m"
 
                 // Save Config for ZivpnService
                 getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
@@ -101,6 +105,8 @@ class MainActivity: FlutterActivity() {
                     .putFloat("multiplier", multiplier.toFloat())
                     .putString("udp_mode", udpMode)
                     .putInt("mtu", mtu)
+                    .putBoolean("auto_tuning", autoTuning)
+                    .putString("buffer_size", bufferSize)
                     .apply()
 
                 sendToLog("Config saved. Ready to start VPN.")

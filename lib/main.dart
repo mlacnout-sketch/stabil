@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -125,14 +126,13 @@ class _HomePageState extends State<HomePage> {
         _logs.add("Error stopping: $e");
       }
     } else {
-      // Load config from prefs before starting
       final prefs = await SharedPreferences.getInstance();
       final ip = prefs.getString('ip') ?? "";
       if (ip.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Please configure Server IP in Settings")),
         );
-        setState(() => _selectedIndex = 3); // Jump to settings
+        setState(() => _selectedIndex = 3);
         return;
       }
 
@@ -142,9 +142,11 @@ class _HomePageState extends State<HomePage> {
           "port_range": prefs.getString('port_range') ?? "6000-19999",
           "pass": prefs.getString('auth') ?? "",
           "obfs": prefs.getString('obfs') ?? "hu``hqb`c",
-          "recv_window_multiplier": 4.0, // Max performance
+          "recv_window_multiplier": 4.0,
           "udp_mode": "udp",
-          "mtu": 1500
+          "mtu": int.tryParse(prefs.getString('mtu') ?? "1500") ?? 1500,
+          "auto_tuning": prefs.getBool('auto_tuning') ?? true,
+          "buffer_size": prefs.getString('buffer_size') ?? "4m"
         });
         await platform.invokeMethod('startVpn');
         setState(() => _isRunning = true);
@@ -177,7 +179,7 @@ class _HomePageState extends State<HomePage> {
         selectedIndex: _selectedIndex,
         onDestinationSelected: (i) => setState(() => _selectedIndex = i),
         backgroundColor: const Color(0xFF1E1E2E),
-        indicatorColor: const Color(0xFF6C63FF).withValues(alpha: 0.2), // Fixed deprecated withOpacity
+        indicatorColor: const Color(0xFF6C63FF).withValues(alpha: 0.2),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
           NavigationDestination(icon: Icon(Icons.public_outlined), selectedIcon: Icon(Icons.public), label: 'Proxies'),
@@ -188,8 +190,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
-
-// --- TABS ---
 
 class DashboardTab extends StatelessWidget {
   final bool isRunning;
@@ -216,7 +216,6 @@ class DashboardTab extends StatelessWidget {
           const Text("Turbo Tunnel Engine", style: TextStyle(color: Colors.grey)),
           const SizedBox(height: 40),
           
-          // Big Connection Button
           Expanded(
             child: Center(
               child: GestureDetector(
@@ -230,7 +229,7 @@ class DashboardTab extends StatelessWidget {
                     color: isRunning ? const Color(0xFF6C63FF) : const Color(0xFF272736),
                     boxShadow: [
                       BoxShadow(
-                        color: (isRunning ? const Color(0xFF6C63FF) : Colors.black).withValues(alpha: 0.4), // Fixed deprecated
+                        color: (isRunning ? const Color(0xFF6C63FF) : Colors.black).withValues(alpha: 0.4),
                         blurRadius: 30,
                         spreadRadius: 10,
                       )
@@ -256,7 +255,6 @@ class DashboardTab extends StatelessWidget {
             ),
           ),
           
-          // Traffic Stats (Live)
           Row(
             children: [
               Expanded(child: StatCard(label: "Download", value: dl, icon: Icons.download, color: Colors.green)),
@@ -291,7 +289,7 @@ class StatCard extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)), // Fixed deprecated
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
             child: Icon(icon, color: color),
           ),
           const SizedBox(width: 15),
@@ -308,48 +306,93 @@ class StatCard extends StatelessWidget {
   }
 }
 
-class ProxiesTab extends StatelessWidget {
+class ProxiesTab extends StatefulWidget {
   const ProxiesTab({super.key});
+
+  @override
+  State<ProxiesTab> createState() => _ProxiesTabState();
+}
+
+class _ProxiesTabState extends State<ProxiesTab> {
+  String _latency = "Untested";
+  bool _isTesting = false;
+
+  Future<void> _testPing() async {
+    setState(() {
+      _isTesting = true;
+      _latency = "Testing...";
+    });
+
+    final stopwatch = Stopwatch()..start();
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 5);
+      final request = await client.headUrl(Uri.parse('http://gstatic.com/generate_204'));
+      final response = await request.close();
+      stopwatch.stop();
+      
+      if (response.statusCode == 204) {
+        setState(() => _latency = "${stopwatch.elapsedMilliseconds} ms");
+      } else {
+        setState(() => _latency = "Error: ${response.statusCode}");
+      }
+    } catch (e) {
+      setState(() => _latency = "Timeout");
+    } finally {
+      setState(() => _isTesting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const Text("Proxy Groups", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text("Proxy Groups", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            ElevatedButton.icon(
+              onPressed: _isTesting ? null : _testPing,
+              icon: _isTesting 
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) 
+                  : const Icon(Icons.flash_on),
+              label: Text(_isTesting ? "Testing" : "Test Latency"),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF272736), foregroundColor: Colors.white),
+            )
+          ],
+        ),
         const SizedBox(height: 20),
-        _buildGroup("Load Balancer", "Round Robin", Colors.blue),
-        _buildGroup("Hysteria Core", "UDP Turbo", Colors.purple),
+        _buildGroup("Load Balancer", "Round Robin", Colors.blue, _latency),
         const SizedBox(height: 20),
         const Text("Nodes", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
         const SizedBox(height: 10),
-        _buildNode("Hysteria-1", "127.0.0.1:20080", "12 ms"),
-        _buildNode("Hysteria-2", "127.0.0.1:20081", "14 ms"),
-        _buildNode("Hysteria-3", "127.0.0.1:20082", "11 ms"),
-        _buildNode("Hysteria-4", "127.0.0.1:20083", "13 ms"),
+        _buildNode("Hysteria-1", "127.0.0.1:20080"),
+        _buildNode("Hysteria-2", "127.0.0.1:20081"),
+        _buildNode("Hysteria-3", "127.0.0.1:20082"),
+        _buildNode("Hysteria-4", "127.0.0.1:20083"),
       ],
     );
   }
 
-  Widget _buildGroup(String name, String type, Color color) {
+  Widget _buildGroup(String name, String type, Color color, String ping) {
     return Card(
       child: ListTile(
         leading: Icon(Icons.hub, color: color),
         title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(type),
-        trailing: const Icon(Icons.more_vert),
+        trailing: Text(ping, style: TextStyle(color: ping.contains("ms") ? Colors.green : Colors.grey, fontWeight: FontWeight.bold)),
       ),
     );
   }
 
-  Widget _buildNode(String name, String ip, String ping) {
+  Widget _buildNode(String name, String ip) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        leading: const Icon(Icons.flash_on, color: Colors.green),
+        leading: const Icon(Icons.dns, color: Colors.white54),
         title: Text(name),
         subtitle: Text(ip),
-        trailing: Text(ping, style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
       ),
     );
   }
@@ -371,7 +414,19 @@ class LogsTab extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text("Live Logs", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              IconButton(icon: const Icon(Icons.delete), onPressed: () => logs.clear()),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.copy_all),
+                    tooltip: "Copy All",
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: logs.join("\n")));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("All logs copied")));
+                    },
+                  ),
+                  IconButton(icon: const Icon(Icons.delete), onPressed: () => logs.clear()),
+                ],
+              ),
             ],
           ),
         ),
@@ -392,7 +447,7 @@ class LogsTab extends StatelessWidget {
                 final isError = log.toLowerCase().contains("error") || log.toLowerCase().contains("fail");
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
+                  child: SelectableText(
                     log,
                     style: TextStyle(
                       fontFamily: 'monospace',
@@ -422,6 +477,10 @@ class _SettingsTabState extends State<SettingsTab> {
   final _ipCtrl = TextEditingController();
   final _authCtrl = TextEditingController();
   final _obfsCtrl = TextEditingController();
+  final _mtuCtrl = TextEditingController();
+  
+  bool _autoTuning = true;
+  String _bufferSize = "4m";
 
   @override
   void initState() {
@@ -435,6 +494,9 @@ class _SettingsTabState extends State<SettingsTab> {
       _ipCtrl.text = prefs.getString('ip') ?? "";
       _authCtrl.text = prefs.getString('auth') ?? "";
       _obfsCtrl.text = prefs.getString('obfs') ?? "hu``hqb`c";
+      _mtuCtrl.text = prefs.getString('mtu') ?? "1500";
+      _autoTuning = prefs.getBool('auto_tuning') ?? true;
+      _bufferSize = prefs.getString('buffer_size') ?? "4m";
     });
   }
 
@@ -443,6 +505,9 @@ class _SettingsTabState extends State<SettingsTab> {
     await prefs.setString('ip', _ipCtrl.text);
     await prefs.setString('auth', _authCtrl.text);
     await prefs.setString('obfs', _obfsCtrl.text);
+    await prefs.setString('mtu', _mtuCtrl.text);
+    await prefs.setBool('auto_tuning', _autoTuning);
+    await prefs.setString('buffer_size', _bufferSize);
     if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Settings Saved")));
   }
 
@@ -458,6 +523,44 @@ class _SettingsTabState extends State<SettingsTab> {
         _buildInput(_authCtrl, "Password / Auth", Icons.password),
         const SizedBox(height: 15),
         _buildInput(_obfsCtrl, "Obfuscation Salt", Icons.security),
+        const SizedBox(height: 30),
+        
+        const Text("Core Settings (Advanced)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
+        const SizedBox(height: 15),
+        
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                _buildInput(_mtuCtrl, "MTU (Default: 1500)", Icons.settings_ethernet),
+                const SizedBox(height: 15),
+                SwitchListTile(
+                  title: const Text("TCP Auto Tuning"),
+                  subtitle: const Text("Dynamic buffer sizing for stability"),
+                  value: _autoTuning,
+                  onChanged: (val) => setState(() => _autoTuning = val),
+                ),
+                const Divider(),
+                ListTile(
+                  title: const Text("TCP Buffer Size"),
+                  subtitle: const Text("Max window size per connection"),
+                  trailing: DropdownButton<String>(
+                    value: _bufferSize,
+                    items: const [
+                      DropdownMenuItem(value: "1m", child: Text("1 MB")),
+                      DropdownMenuItem(value: "2m", child: Text("2 MB")),
+                      DropdownMenuItem(value: "4m", child: Text("4 MB")),
+                      DropdownMenuItem(value: "8m", child: Text("8 MB")),
+                    ],
+                    onChanged: (val) => setState(() => _bufferSize = val!),
+                  ),
+                )
+              ],
+            ),
+          ),
+        ),
+
         const SizedBox(height: 30),
         ElevatedButton.icon(
           onPressed: _save,

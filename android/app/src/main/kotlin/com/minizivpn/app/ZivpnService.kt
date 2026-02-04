@@ -97,6 +97,8 @@ class ZivpnService : VpnService() {
         val obfs = prefs.getString("server_obfs", "") ?: ""
         val multiplier = prefs.getFloat("multiplier", 1.0f)
         val mtu = prefs.getInt("mtu", 1500)
+        val autoTuning = prefs.getBoolean("auto_tuning", true)
+        val bufferSize = prefs.getString("buffer_size", "4m") ?: "4m"
 
         // 1. START HYSTERIA & LOAD BALANCER
         try {
@@ -167,18 +169,18 @@ class ZivpnService : VpnService() {
             Thread {
                 try {
                     val udpTimeout = 60000L
-                    val finalMtu = 1500L // Set MTU to 1500 as requested
-                    logToApp("Starting Engine with MTU $finalMtu...")
+                    val finalMtu = mtu.toLong()
+                    logToApp("Starting Engine: MTU=$finalMtu, Buf=$bufferSize, AutoTune=$autoTuning")
                     mobile.Mobile.setLogHandler(tunLogger)
                     mobile.Mobile.start(
                         "socks5://127.0.0.1:7777",
                         "fd://$fd",
-                        "info",
+                        "debug",
                         finalMtu,
                         udpTimeout,
-                        "4m", 
-                        "4m", 
-                        true    // Re-enable auto-tuning for 1500 MTU stability
+                        bufferSize, 
+                        bufferSize, 
+                        autoTuning
                     )
                     logToApp("Tun2Socks Engine Started successfully.")
                 } catch (e: Exception) {
