@@ -123,7 +123,7 @@ class ZivpnService : VpnService() {
                         udpTimeout,
                         "2m",    // TCP Send Buffer
                         "2m",    // TCP Receive Buffer
-                        true     // TCP Auto Tuning
+                        false    // TCP Auto Tuning (Disabled)
                     )
                     Log.i("ZIVPN-Tun", "Tun2Socks Engine Started")
                 } catch (e: Exception) {
