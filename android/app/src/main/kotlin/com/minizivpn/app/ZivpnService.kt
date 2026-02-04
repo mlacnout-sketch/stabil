@@ -12,6 +12,9 @@ import mobile.Mobile
 import java.io.File
 import org.json.JSONObject
 
+import java.io.BufferedReader
+import java.io.InputStreamReader
+
 /**
  * ZIVPN TunService
  * Handles the VpnService interface and integrates with tun2socks via JNI.
@@ -22,10 +25,42 @@ class ZivpnService : VpnService() {
     companion object {
         const val ACTION_CONNECT = "com.minizivpn.app.CONNECT"
         const val ACTION_DISCONNECT = "com.minizivpn.app.DISCONNECT"
+        const val ACTION_LOG = "com.minizivpn.app.LOG"
     }
 
     private var vpnInterface: ParcelFileDescriptor? = null
     private val processes = mutableListOf<Process>()
+
+    private fun logToApp(msg: String) {
+        val intent = Intent(ACTION_LOG)
+        intent.putExtra("message", msg)
+        sendBroadcast(intent)
+        Log.d("ZIVPN-Core", msg)
+    }
+
+    private fun captureProcessLog(process: Process, name: String) {
+        Thread {
+            try {
+                val reader = BufferedReader(InputStreamReader(process.inputStream))
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    logToApp("[$name] $line")
+                }
+            } catch (e: Exception) {
+                logToApp("[$name] Log stream closed: ${e.message}")
+            }
+        }.start()
+        
+        Thread {
+            try {
+                val reader = BufferedReader(InputStreamReader(process.errorStream))
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    logToApp("[$name-ERR] $line")
+                }
+            } catch (e: Exception) {}
+        }.start()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -124,15 +159,22 @@ class ZivpnService : VpnService() {
             builder.addDisallowedApplication(packageName)
         } catch (e: Exception) {}
 
-        builder.addDnsServer("8.8.8.8")
         builder.addDnsServer("1.1.1.1")
+        builder.addDnsServer("8.8.8.8")
         builder.addAddress("172.19.0.1", 30)
 
-        // DNS Hijacking: Force these DNS IPs into the TUN interface
-        builder.addRoute("8.8.8.8", 32)
-        builder.addRoute("8.8.4.4", 32)
-        builder.addRoute("1.1.1.1", 32)
-        builder.addRoute("1.0.0.1", 32)
+        // Aggressive DNS Hijacking: Force major DNS providers into the TUN
+        val dnsProviders = listOf(
+            "1.1.1.1", "1.0.0.1",       // Cloudflare
+            "8.8.8.8", "8.8.4.4",       // Google
+            "9.9.9.9", "149.112.112.112", // Quad9
+            "208.67.222.222", "208.67.220.220" // OpenDNS
+        )
+        for (dns in dnsProviders) {
+            try {
+                builder.addRoute(dns, 32)
+            } catch (e: Exception) {}
+        }
 
         try {
             vpnInterface = builder.establish()
@@ -143,20 +185,21 @@ class ZivpnService : VpnService() {
             // 3. Start tun2socks (Go/gVisor Engine) via JNI
             Thread {
                 try {
-                    val udpTimeout = 60000L // 1 minute in ms
+                    val udpTimeout = 60000L
+                    logToApp("Starting Engine with MTU $mtu...")
                     mobile.Mobile.start(
                         "socks5://127.0.0.1:7777",
                         "fd://$fd",
                         "info",
                         mtu.toLong(),
                         udpTimeout,
-                        "2m",    // TCP Send Buffer
-                        "2m",    // TCP Receive Buffer
-                        false    // TCP Auto Tuning (Disabled)
+                        "4m",    // Increased TCP Send Buffer
+                        "4m",    // Increased TCP Receive Buffer
+                        false    // Auto Tuning Disabled per request
                     )
-                    Log.i("ZIVPN-Tun", "Tun2Socks Engine Started")
+                    logToApp("Tun2Socks Engine Started successfully.")
                 } catch (e: Exception) {
-                    Log.e("ZIVPN-Tun", "Failed to start Tun2Socks: ${e.message}")
+                    logToApp("Engine Error: ${e.message}")
                 }
             }.start()
 
@@ -203,10 +246,12 @@ class ZivpnService : VpnService() {
             
             val p = hyPb.start()
             processes.add(p)
+            captureProcessLog(p, "Hysteria-$port")
             tunnelTargets.add("127.0.0.1:$port")
         }
         
-        Thread.sleep(1000)
+        logToApp("Waiting for cores to warm up...")
+        Thread.sleep(1500)
 
         val lbCmd = mutableListOf(libLoad, "-lport", "7777", "-tunnel")
         lbCmd.addAll(tunnelTargets)
@@ -214,8 +259,12 @@ class ZivpnService : VpnService() {
         val lbPb = ProcessBuilder(lbCmd)
         lbPb.directory(filesDir)
         lbPb.environment()["LD_LIBRARY_PATH"] = libDir
+        lbPb.redirectErrorStream(true)
+        
         val lbProcess = lbPb.start()
         processes.add(lbProcess)
+        captureProcessLog(lbProcess, "LoadBalancer")
+        logToApp("Load Balancer active on port 7777")
     }
 
     private fun disconnect() {

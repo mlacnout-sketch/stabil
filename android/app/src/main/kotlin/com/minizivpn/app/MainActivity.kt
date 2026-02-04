@@ -11,6 +11,10 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Bundle
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+
 /**
  * ZIVPN Turbo Main Activity
  * Optimized for high-performance tunneling and aggressive cleanup.
@@ -18,15 +22,26 @@ import android.os.Bundle
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.minizivpn.app/core"
     private val LOG_CHANNEL = "com.minizivpn.app/logs"
+    private val ACTION_LOG = "com.minizivpn.app.LOG"
     private val REQUEST_VPN_CODE = 1
     
     private var logSink: EventChannel.EventSink? = null
     private val uiHandler = Handler(Looper.getMainLooper())
 
+    private val logReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val log = intent?.getStringExtra("message")
+            if (log != null) {
+                sendToLog(log)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Ensure environment is clean on launch
         stopEngine()
+        registerReceiver(logReceiver, IntentFilter(ACTION_LOG))
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -138,6 +153,9 @@ class MainActivity: FlutterActivity() {
     
     override fun onDestroy() {
         stopEngine()
+        try {
+            unregisterReceiver(logReceiver)
+        } catch (e: Exception) {}
         super.onDestroy()
     }
 }
