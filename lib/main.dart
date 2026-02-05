@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
-import 'dart:io';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -62,6 +61,10 @@ class _HomePageState extends State<HomePage> {
   final List<String> _logs = [];
   final ScrollController _logScrollCtrl = ScrollController();
   
+  // Multi-Account State
+  List<Map<String, dynamic>> _accounts = [];
+  int _activeAccountIndex = -1;
+  
   // Timer State
   Timer? _timer;
   DateTime? _startTime;
@@ -70,11 +73,13 @@ class _HomePageState extends State<HomePage> {
   // Stats
   String _dlSpeed = "0 KB/s";
   String _ulSpeed = "0 KB/s";
+  int _sessionRx = 0;
+  int _sessionTx = 0;
   
   @override
   void initState() {
     super.initState();
-    _checkVpnStatus();
+    _loadData();
     _initLogListener();
     _initStatsListener();
   }
@@ -85,10 +90,24 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  Future<void> _checkVpnStatus() async {
+  Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
+    
+    // Load Accounts
+    final String? jsonStr = prefs.getString('saved_accounts');
+    if (jsonStr != null) {
+      _accounts = List<Map<String, dynamic>>.from(jsonDecode(jsonStr));
+    }
+    
+    // Load VPN Status
     final isRunning = prefs.getBool('vpn_running') ?? false;
     final startMillis = prefs.getInt('vpn_start_time');
+    final currentIp = prefs.getString('ip') ?? "";
+    
+    // Find active account
+    if (currentIp.isNotEmpty) {
+      _activeAccountIndex = _accounts.indexWhere((acc) => acc['ip'] == currentIp);
+    }
     
     setState(() {
       _isRunning = isRunning;
@@ -99,6 +118,11 @@ class _HomePageState extends State<HomePage> {
         _durationString = "00:00:00";
       }
     });
+  }
+
+  Future<void> _saveAccounts() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('saved_accounts', jsonEncode(_accounts));
   }
 
   void _startTimer() {
@@ -121,6 +145,8 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _durationString = "00:00:00";
       _startTime = null;
+      _sessionRx = 0;
+      _sessionTx = 0;
     });
   }
 
@@ -145,9 +171,18 @@ class _HomePageState extends State<HomePage> {
         if (parts.length == 2) {
           final rx = int.tryParse(parts[0]) ?? 0;
           final tx = int.tryParse(parts[1]) ?? 0;
+          
           setState(() {
             _dlSpeed = _formatBytes(rx);
             _ulSpeed = _formatBytes(tx);
+            _sessionRx += rx;
+            _sessionTx += tx;
+            
+            // Accumulate Quota for Active Account
+            if (_activeAccountIndex != -1 && _activeAccountIndex < _accounts.length) {
+              final acc = _accounts[_activeAccountIndex];
+              acc['usage'] = (acc['usage'] ?? 0) + rx + tx;
+            }
           });
         }
       }
@@ -169,6 +204,7 @@ class _HomePageState extends State<HomePage> {
         await platform.invokeMethod('stopCore');
         _stopTimer();
         await prefs.remove('vpn_start_time');
+        await _saveAccounts(); // Save quota
         setState(() => _isRunning = false);
       } catch (e) {
         _logs.add("Error stopping: $e");
@@ -215,7 +251,32 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _handleAccountSwitch() async {
+  Future<void> _handleAccountSwitch(int index) async {
+    final account = _accounts[index];
+    final prefs = await SharedPreferences.getInstance();
+    
+    await prefs.setString('ip', account['ip']);
+    await prefs.setString('auth', account['auth']);
+    await prefs.setString('obfs', account['obfs']);
+    
+    setState(() {
+      _activeAccountIndex = index;
+      _sessionRx = 0; // Reset session stats
+      _sessionTx = 0;
+    });
+    
+    await _saveAccounts(); // Save any pending stats
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Activated: ${account['name']}"),
+          backgroundColor: const Color(0xFF6C63FF),
+          duration: const Duration(milliseconds: 800),
+        ),
+      );
+    }
+
     if (_isRunning) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -225,15 +286,26 @@ class _HomePageState extends State<HomePage> {
         )
       );
       
-      // Stop
-      await _toggleVpn();
-      
-      // Wait for cleanup
+      await _toggleVpn(); // Stop
       await Future.delayed(const Duration(milliseconds: 500));
-      
-      // Start
-      await _toggleVpn();
+      await _toggleVpn(); // Start
     }
+  }
+  
+  void _addAccount(Map<String, dynamic> acc) {
+    setState(() {
+      _accounts.add(acc);
+    });
+    _saveAccounts();
+  }
+  
+  void _deleteAccount(int index) {
+    setState(() {
+      _accounts.removeAt(index);
+      if (_activeAccountIndex == index) _activeAccountIndex = -1;
+      else if (_activeAccountIndex > index) _activeAccountIndex--;
+    });
+    _saveAccounts();
   }
 
   @override
@@ -245,8 +317,16 @@ class _HomePageState extends State<HomePage> {
         dl: _dlSpeed, 
         ul: _ulSpeed,
         duration: _durationString,
+        sessionRx: _sessionRx,
+        sessionTx: _sessionTx,
       ),
-      ProxiesTab(onActivate: _handleAccountSwitch),
+      ProxiesTab(
+        accounts: _accounts, 
+        activePingIndex: _activeAccountIndex,
+        onActivate: _handleAccountSwitch,
+        onAdd: _addAccount,
+        onDelete: _deleteAccount,
+      ),
       LogsTab(logs: _logs, scrollController: _logScrollCtrl),
       const SettingsTab(),
     ];
@@ -280,6 +360,8 @@ class DashboardTab extends StatelessWidget {
   final String dl;
   final String ul;
   final String duration;
+  final int sessionRx;
+  final int sessionTx;
 
   const DashboardTab({
     super.key, 
@@ -288,7 +370,16 @@ class DashboardTab extends StatelessWidget {
     this.dl = "0 KB/s",
     this.ul = "0 KB/s",
     this.duration = "00:00:00",
+    this.sessionRx = 0,
+    this.sessionTx = 0,
   });
+
+  String _formatTotalBytes(int bytes) {
+    if (bytes < 1024) return "$bytes B";
+    if (bytes < 1024 * 1024) return "${(bytes / 1024).toStringAsFixed(1)} KB";
+    if (bytes < 1024 * 1024 * 1024) return "${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB";
+    return "${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB";
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -299,7 +390,7 @@ class DashboardTab extends StatelessWidget {
         children: [
           const Text("ZIVPN", style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
           const Text("Turbo Tunnel Engine", style: TextStyle(color: Colors.grey)),
-          const SizedBox(height: 40),
+          const SizedBox(height: 20),
           
           Expanded(
             child: Center(
@@ -367,6 +458,26 @@ class DashboardTab extends StatelessWidget {
             ),
           ),
           
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 15),
+            decoration: BoxDecoration(
+              color: const Color(0xFF272736),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                 Text("Session: ${_formatTotalBytes(sessionRx + sessionTx)}", style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                 Container(width: 1, height: 12, color: Colors.white10),
+                 Text("Rx: ${_formatTotalBytes(sessionRx)}", style: const TextStyle(color: Colors.greenAccent, fontSize: 12)),
+                 Container(width: 1, height: 12, color: Colors.white10),
+                 Text("Tx: ${_formatTotalBytes(sessionTx)}", style: const TextStyle(color: Colors.orangeAccent, fontSize: 12)),
+              ],
+            ),
+          ),
+
           Row(
             children: [
               Expanded(child: StatCard(label: "Download", value: dl, icon: Icons.download, color: Colors.green)),
@@ -418,68 +529,30 @@ class StatCard extends StatelessWidget {
   }
 }
 
-class ProxiesTab extends StatefulWidget {
-  final Future<void> Function()? onActivate;
-  
-  const ProxiesTab({super.key, this.onActivate});
+class ProxiesTab extends StatelessWidget {
+  final List<Map<String, dynamic>> accounts;
+  final int activePingIndex;
+  final Function(int) onActivate;
+  final Function(Map<String, dynamic>) onAdd;
+  final Function(int) onDelete;
 
-  @override
-  State<ProxiesTab> createState() => _ProxiesTabState();
-}
+  const ProxiesTab({
+    super.key,
+    required this.accounts,
+    required this.activePingIndex,
+    required this.onActivate,
+    required this.onAdd,
+    required this.onDelete,
+  });
 
-class _ProxiesTabState extends State<ProxiesTab> {
-  List<Map<String, dynamic>> _accounts = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAccounts();
+  String _formatTotalBytes(int bytes) {
+    if (bytes < 1024) return "$bytes B";
+    if (bytes < 1024 * 1024) return "${(bytes / 1024).toStringAsFixed(1)} KB";
+    if (bytes < 1024 * 1024 * 1024) return "${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB";
+    return "${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB";
   }
 
-  Future<void> _loadAccounts() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? jsonStr = prefs.getString('saved_accounts');
-    if (jsonStr != null) {
-      setState(() {
-        _accounts = List<Map<String, dynamic>>.from(jsonDecode(jsonStr));
-      });
-    }
-  }
-
-  Future<void> _saveAccounts() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('saved_accounts', jsonEncode(_accounts));
-  }
-
-  Future<void> _activateAccount(Map<String, dynamic> account) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('ip', account['ip']);
-    await prefs.setString('auth', account['auth']);
-    await prefs.setString('obfs', account['obfs']);
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Activated: ${account['name']}"),
-          backgroundColor: const Color(0xFF6C63FF),
-          duration: const Duration(milliseconds: 800),
-        ),
-      );
-    }
-    
-    if (widget.onActivate != null) {
-      await widget.onActivate!();
-    }
-  }
-
-  Future<void> _deleteAccount(int index) async {
-    setState(() {
-      _accounts.removeAt(index);
-    });
-    await _saveAccounts();
-  }
-
-  void _showAddDialog() {
+  void _showAddDialog(BuildContext context) {
     final nameCtrl = TextEditingController();
     final ipCtrl = TextEditingController();
     final authCtrl = TextEditingController();
@@ -505,15 +578,13 @@ class _ProxiesTabState extends State<ProxiesTab> {
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6C63FF), foregroundColor: Colors.white),
             onPressed: () {
               if (nameCtrl.text.isNotEmpty && ipCtrl.text.isNotEmpty) {
-                setState(() {
-                  _accounts.add({
-                    "name": nameCtrl.text,
-                    "ip": ipCtrl.text,
-                    "auth": authCtrl.text,
-                    "obfs": "hu``hqb`c",
-                  });
+                onAdd({
+                  "name": nameCtrl.text,
+                  "ip": ipCtrl.text,
+                  "auth": authCtrl.text,
+                  "obfs": "hu``hqb`c",
+                  "usage": 0, // Init usage
                 });
-                _saveAccounts();
                 Navigator.pop(ctx);
               }
             },
@@ -529,16 +600,16 @@ class _ProxiesTabState extends State<ProxiesTab> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddDialog,
+        onPressed: () => _showAddDialog(context),
         backgroundColor: const Color(0xFF6C63FF),
         child: const Icon(Icons.add, color: Colors.white),
       ),
-      body: _accounts.isEmpty 
+      body: accounts.isEmpty 
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.no_accounts_outlined, size: 64, color: Colors.grey.withOpacity(0.3)),
+                  Icon(Icons.no_accounts_outlined, size: 64, color: Colors.grey.withValues(alpha: 0.3)),
                   const SizedBox(height: 16),
                   const Text("No accounts saved", style: TextStyle(color: Colors.grey)),
                 ],
@@ -546,31 +617,56 @@ class _ProxiesTabState extends State<ProxiesTab> {
             )
           : ListView.builder(
               padding: const EdgeInsets.all(20),
-              itemCount: _accounts.length,
+              itemCount: accounts.length,
               itemBuilder: (context, index) {
-                final acc = _accounts[index];
+                final acc = accounts[index];
+                final isSelected = index == activePingIndex;
+                final usage = acc['usage'] ?? 0;
+                
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: isSelected ? const BorderSide(color: Color(0xFF6C63FF), width: 2) : BorderSide.none,
+                  ),
                   child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     leading: Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF6C63FF).withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(8),
+                        color: isSelected ? const Color(0xFF6C63FF) : const Color(0xFF6C63FF).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.dns, color: Color(0xFF6C63FF)),
+                      child: Icon(Icons.dns, color: isSelected ? Colors.white : const Color(0xFF6C63FF)),
                     ),
                     title: Text(acc['name'] ?? "Unknown", style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text(acc['ip'] ?? ""),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(acc['ip'] ?? "", style: const TextStyle(fontSize: 12)),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.black26,
+                            borderRadius: BorderRadius.circular(4)
+                          ),
+                          child: Text(
+                            "Used: ${_formatTotalBytes(usage)}", 
+                            style: const TextStyle(fontSize: 10, color: Colors.grey),
+                          ),
+                        ),
+                      ],
+                    ),
                     trailing: PopupMenuButton(
                       itemBuilder: (ctx) => [
                         const PopupMenuItem(value: 'delete', child: Text("Delete")),
                       ],
                       onSelected: (val) {
-                        if (val == 'delete') _deleteAccount(index);
+                        if (val == 'delete') onDelete(index);
                       },
                     ),
-                    onTap: () => _activateAccount(acc),
+                    onTap: () => onActivate(index),
                   ),
                 );
               },
