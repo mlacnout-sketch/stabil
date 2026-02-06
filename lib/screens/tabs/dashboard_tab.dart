@@ -80,57 +80,48 @@ class _DashboardTabState extends State<DashboardTab> with SingleTickerProviderSt
     String target = (prefs.getString('ping_target') ?? "http://www.gstatic.com/generate_204").trim();
     
     if (target.isEmpty) target = "http://www.gstatic.com/generate_204";
-    if (!target.startsWith("http")) {
-      target = "http://$target";
-    }
 
     final stopwatch = Stopwatch()..start();
-    final client = HttpClient();
-    
-    // Crucial: Trust all certificates for pinging (avoid handshake errors on captive portals or weird networks)
-    client.badCertificateCallback = (cert, host, port) => true;
-    client.connectionTimeout = const Duration(seconds: 5);
 
-    try {
-      // 1. Try HTTP Request
-      final request = await client.getUrl(Uri.parse(target));
-      
-      // Fake User-Agent to avoid being blocked by some firewalls
-      request.headers.add("User-Agent", "Mozilla/5.0 (compatible; ZIVPN/1.0)");
-      
-      final response = await request.close();
-      stopwatch.stop();
-      
-      if (response.statusCode >= 200 && response.statusCode < 400) {
-        return "${stopwatch.elapsedMilliseconds} ms";
-      } else {
-        return "HTTP ${response.statusCode}";
-      }
-    } catch (e) {
-      // 2. Fallback to ICMP (Only if HTTP totally fails)
+    // SIMPLE LOGIC: HTTP vs ICMP based on prefix
+    if (target.startsWith("http")) {
+      // 1. HTTP Mode
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 5);
+      client.badCertificateCallback = (cert, host, port) => true; // Allow bad SSL for vpn check
+
       try {
-        final cleanTarget = target.replaceAll(RegExp(r'^https?://'), '').split('/')[0];
-        final proc = await Process.run('ping', ['-c', '1', '-W', '1', cleanTarget]);
+        final request = await client.getUrl(Uri.parse(target));
+        request.headers.add("User-Agent", "ZIVPN");
+        final response = await request.close();
+        stopwatch.stop();
+        
+        if (response.statusCode >= 200 && response.statusCode < 400) {
+          return "${stopwatch.elapsedMilliseconds} ms";
+        } else {
+          return "HTTP ${response.statusCode}";
+        }
+      } catch (e) {
+        return "Net Error";
+      } finally {
+        client.close();
+      }
+    } else {
+      // 2. ICMP Mode (System Ping)
+      try {
+        final proc = await Process.run('ping', ['-c', '1', '-W', '2', target]);
+        stopwatch.stop();
+        
         if (proc.exitCode == 0) {
            final match = RegExp(r"time=([0-9\.]+) ms").firstMatch(proc.stdout.toString());
            if (match != null) return "${match.group(1)} ms";
+           return "Reply";
+        } else {
+           return "Timeout";
         }
-      } catch (_) {}
-
-      // 3. Fallback to TCP Handshake (8.8.8.8:53) - The most reliable connectivity check
-      try {
-        final socket = await Socket.connect('8.8.8.8', 53, timeout: const Duration(seconds: 2));
-        socket.destroy();
-        stopwatch.stop();
-        return "TCP OK"; // Use "TCP OK" or elapsed time
-      } catch (_) {}
-      
-      // Return specific error for debugging
-      if (e.toString().contains("SocketException")) return "Net Error";
-      if (e.toString().contains("Timeout")) return "Timeout";
-      return "Error";
-    } finally {
-      client.close(); // Ensure resources are released
+      } catch (e) {
+        return "Error";
+      }
     }
   }
 
