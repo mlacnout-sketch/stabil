@@ -102,9 +102,10 @@ jobs:
       - name: Create Release Tag
         id: tag_version
         run: |
-          VERSION="v1.1.${{ github.run_number }}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Generated version: $VERSION"
+          VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)
+          TAG="v$VERSION-b${{ github.run_number }}"
+          echo "VERSION=$TAG" >> $GITHUB_ENV
+          echo "Generated version: $TAG"
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
