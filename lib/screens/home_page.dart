@@ -345,7 +345,7 @@ class _HomePageState extends State<HomePage> {
               },
             ),
             LogsTab(logs: _logs, scrollController: _logScrollCtrl),
-            const SettingsTab(),
+            SettingsTab(onCheckUpdate: () => _updateViewModel.checkForUpdate()),
           ],
         ),
       ),
