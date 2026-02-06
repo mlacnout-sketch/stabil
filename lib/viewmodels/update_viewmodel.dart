@@ -30,9 +30,14 @@ class UpdateViewModel {
       final response = await http.Client().send(http.Request('GET', Uri.parse(version.apkUrl)));
       final contentLength = response.contentLength ?? 0;
       
-      final dir = await getExternalStorageDirectory();
-      final targetDir = dir ?? await getTemporaryDirectory();
-      final file = File("${targetDir.path}/stabil_update_${version.name}.apk");
+      // Use temporary directory to avoid storage permission issues
+      final dir = await getTemporaryDirectory();
+      final file = File("${dir.path}/update.apk");
+      
+      // Delete existing file if any
+      if (await file.exists()) {
+        await file.delete();
+      }
       
       final sink = file.openWrite();
       int receivedBytes = 0;
@@ -48,11 +53,12 @@ class UpdateViewModel {
       await sink.flush();
       await sink.close();
       
+      print("Download completed: ${file.path} (${file.length()} bytes)");
       _isDownloading.add(false);
       _downloadProgress.add(1.0);
       return file;
     } catch (e) {
-      print("Download error: $e");
+      print("Download error details: $e");
       _isDownloading.add(false);
       _downloadProgress.add(-1.0);
       return null;
