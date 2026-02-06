@@ -3,11 +3,14 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:open_filex/open_filex.dart';
 
 import 'tabs/dashboard_tab.dart';
 import 'tabs/proxies_tab.dart';
 import 'tabs/logs_tab.dart';
 import 'tabs/settings_tab.dart';
+import '../viewmodels/update_viewmodel.dart';
+import '../models/app_version.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,6 +21,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
+  final _updateViewModel = UpdateViewModel();
 
   static const platform = MethodChannel('com.minizivpn.app/core');
   static const logChannel = EventChannel('com.minizivpn.app/logs');
@@ -45,11 +49,97 @@ class _HomePageState extends State<HomePage> {
     _loadData();
     _initLogListener();
     _initStatsListener();
+    
+    // Auto-update check
+    _updateViewModel.availableUpdate.listen((update) {
+      if (update != null && mounted) {
+        _showUpdateDialog(update);
+      }
+    });
+    _updateViewModel.checkForUpdate();
+  }
+
+  void _showUpdateDialog(AppVersion update) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF272736),
+        title: Text("Update Available: v${update.name}"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Size: ${(update.apkSize / (1024 * 1024)).toStringAsFixed(2)} MB"),
+            const SizedBox(height: 10),
+            const Text("Changelog:"),
+            Container(
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: SingleChildScrollView(child: Text(update.description)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context), 
+            child: const Text("Later")
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6C63FF)),
+            onPressed: () {
+              Navigator.pop(context);
+              _executeDownload(update);
+            },
+            child: const Text("Update Now"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _executeDownload(AppVersion update) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StreamBuilder<double>(
+        stream: _updateViewModel.downloadProgress,
+        builder: (context, snapshot) {
+          double progress = snapshot.data ?? 0.0;
+          return AlertDialog(
+            backgroundColor: const Color(0xFF272736),
+            title: const Text("Downloading Update..."),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LinearProgressIndicator(
+                  value: progress >= 0 ? progress : null,
+                  color: const Color(0xFF6C63FF),
+                ),
+                const SizedBox(height: 10),
+                Text(progress >= 0 ? "${(progress * 100).toStringAsFixed(0)}%" : "Connecting..."),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    final file = await _updateViewModel.startDownload(update);
+    if (mounted) Navigator.pop(context); // Close progress dialog
+
+    if (file != null) {
+      await OpenFilex.open(file.path);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Download failed")),
+      );
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _updateViewModel.dispose();
     super.dispose();
   }
 
