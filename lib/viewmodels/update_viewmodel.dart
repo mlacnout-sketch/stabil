@@ -42,10 +42,12 @@ class UpdateViewModel {
 
         final contentLength = response.contentLength ?? 0;
         
-        // Use temporary directory
+        // Use temporary directory with unique filename to prevent stale APKs
         final dir = await getTemporaryDirectory();
-        final file = File("${dir.path}/update.apk");
+        final fileName = "update_${version.name}.apk";
+        final file = File("${dir.path}/$fileName");
         
+        // Delete existing file if any to ensure fresh download
         if (await file.exists()) {
           await file.delete();
         }
