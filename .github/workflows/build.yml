@@ -102,7 +102,8 @@ jobs:
       - name: Create Release Tag
         id: tag_version
         run: |
-          VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)
+          VERSION=$(sed -n 's/^version: \([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' pubspec.yaml)
+          if [ -z "$VERSION" ]; then VERSION="1.0.0"; fi
           TAG="v$VERSION-b${{ github.run_number }}"
           echo "VERSION=$TAG" >> $GITHUB_ENV
           echo "Generated version: $TAG"
