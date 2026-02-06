@@ -345,7 +345,18 @@ class _HomePageState extends State<HomePage> {
               },
             ),
             LogsTab(logs: _logs, scrollController: _logScrollCtrl),
-            SettingsTab(onCheckUpdate: () => _updateViewModel.checkForUpdate()),
+            SettingsTab(onCheckUpdate: () async {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Checking for updates...")),
+              );
+              final hasUpdate = await _updateViewModel.checkForUpdate();
+              if (!hasUpdate && mounted) {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("You are using the latest version!")),
+                );
+              }
+            }),
           ],
         ),
       ),

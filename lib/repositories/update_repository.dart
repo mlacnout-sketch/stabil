@@ -8,19 +8,33 @@ class UpdateRepository {
 
   Future<AppVersion?> fetchUpdate() async {
     try {
+      print("Checking update from: $apiUrl");
       final response = await http.get(Uri.parse(apiUrl));
-      if (response.statusCode != 200) return null;
+      print("Response status: ${response.statusCode}");
+      
+      if (response.statusCode != 200) {
+        print("Failed to fetch updates: ${response.body}");
+        return null;
+      }
 
       final List releases = json.decode(response.body);
       final packageInfo = await PackageInfo.fromPlatform();
       final currentVersion = packageInfo.version;
+      
+      print("Current App Version: $currentVersion");
+      print("Found ${releases.length} releases.");
 
       for (var release in releases) {
         final tagName = release['tag_name'].toString().replaceAll('v', '');
+        print("Checking release tag: $tagName");
         
         if (_isNewer(tagName, currentVersion)) {
+          print("Newer version found: $tagName");
           final assets = release['assets'] as List?;
-          if (assets == null) continue;
+          if (assets == null) {
+             print("No assets in this release.");
+             continue;
+          }
 
           final asset = assets.firstWhere(
             (a) => a['content_type'] == 'application/vnd.android.package-archive' || a['name'].toString().endsWith('.apk'),
@@ -28,18 +42,24 @@ class UpdateRepository {
           );
 
           if (asset != null) {
+            print("APK asset found: ${asset['name']}");
             return AppVersion(
               name: tagName,
               apkUrl: asset['browser_download_url'],
               apkSize: asset['size'],
               description: release['body'] ?? "",
             );
+          } else {
+            print("No APK asset found in release $tagName");
           }
+        } else {
+          print("Version $tagName is not newer than $currentVersion");
         }
       }
     } catch (e) {
       print("Error fetching update: $e");
     }
+    print("No update available.");
     return null;
   }
 

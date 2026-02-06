@@ -117,12 +117,7 @@ class _SettingsTabState extends State<SettingsTab> {
                   title: const Text("Check for Updates"),
                   subtitle: Text("Current: $_appVersion"),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Checking for updates...")),
-                    );
-                    widget.onCheckUpdate();
-                  },
+                  onTap: widget.onCheckUpdate,
                 ),
               ],
             ),
