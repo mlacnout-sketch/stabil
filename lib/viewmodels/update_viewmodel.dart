@@ -28,21 +28,24 @@ class UpdateViewModel {
     try {
       final response = await http.Client().send(http.Request('GET', Uri.parse(version.apkUrl)));
       final contentLength = response.contentLength ?? 0;
-      List<int> bytes = [];
+      
+      final dir = await getExternalStorageDirectory();
+      final targetDir = dir ?? await getTemporaryDirectory();
+      final file = File("${targetDir.path}/stabil_update_${version.name}.apk");
+      
+      final sink = file.openWrite();
+      int receivedBytes = 0;
 
       await for (var chunk in response.stream) {
-        bytes.addAll(chunk);
+        sink.add(chunk);
+        receivedBytes += chunk.length;
         if (contentLength > 0) {
-          _downloadProgress.add(bytes.length / contentLength);
+          _downloadProgress.add(receivedBytes / contentLength);
         }
       }
-
-      final dir = await getExternalStorageDirectory();
-      // Fallback to temporary directory if external storage is unavailable
-      final targetDir = dir ?? await getTemporaryDirectory();
       
-      final file = File("${targetDir.path}/stabil_update_${version.name}.apk");
-      await file.writeAsBytes(bytes);
+      await sink.flush();
+      await sink.close();
       
       _isDownloading.add(false);
       _downloadProgress.add(1.0);
