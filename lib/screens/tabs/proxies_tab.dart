@@ -47,7 +47,7 @@ class _ProxiesTabState extends State<ProxiesTab> {
               ),
               TextField(
                 controller: ipCtrl,
-                decoration: const InputDecoration(labelText: "IP/Domain:Port"),
+                decoration: const InputDecoration(labelText: "Server IP / Domain"),
               ),
               TextField(
                 controller: authCtrl,
@@ -68,26 +68,22 @@ class _ProxiesTabState extends State<ProxiesTab> {
             ),
             onPressed: () {
               final name = nameCtrl.text.trim();
-              final ipPort = ipCtrl.text.trim();
+              final ip = ipCtrl.text.trim();
               final pass = authCtrl.text.trim();
 
-              if (name.isEmpty || ipPort.isEmpty || pass.isEmpty) {
+              if (name.isEmpty || ip.isEmpty || pass.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("All fields are required!")),
                 );
                 return;
               }
 
-              if (!ipPort.contains(":")) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Invalid format. Use IP:Port (e.g. 1.2.3.4:443)")),
-                );
-                return;
-              }
+              // Validation for colon removed as per request.
+              // Users can input IP/Domain without port.
 
               widget.onAdd({
                 "name": name,
-                "ip": ipPort,
+                "ip": ip,
                 "auth": pass,
                 "obfs": "hu``hqb`c",
                 "usage": 0,
