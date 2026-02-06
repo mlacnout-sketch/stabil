@@ -81,13 +81,14 @@ class _ProxiesTabState extends State<ProxiesTab> with TickerProviderStateMixin {
     final targetCtrl = TextEditingController(text: "connectivitycheck.gstatic.com");
     
     final List<String> suggestions = [
+      "http://google.com/generate_204",
+      "http://cp.cloudflare.com/generate_204",
+      "http://connect.rom.miui.com/generate_204",
+      "https://www.gstatic.com/generate_204",
       "connectivitycheck.gstatic.com",
-      "www.gstatic.com",
-      "google.com",
       "1.1.1.1",
-      "8.8.8.8",
-      "facebook.com"
-    ];
+      "8.8.8.8"
+  ];
 
     showDialog(
       context: context,
@@ -185,17 +186,38 @@ class _ProxiesTabState extends State<ProxiesTab> with TickerProviderStateMixin {
       _pingResults[index] = "Pinging...";
     });
 
+    final stopwatch = Stopwatch()..start();
+    String latency = "Timeout";
+
     try {
-      // Use native ping command
-      final result = await Process.run('ping', ['-c', '1', '-W', '2', target]);
-      
-      String latency = "Timeout";
-      if (result.exitCode == 0) {
-        // Parse time=xx.xx ms
-        final RegExp regExp = RegExp(r"time=([0-9\.]+) ms");
-        final match = regExp.firstMatch(result.stdout.toString());
-        if (match != null) {
-          latency = "${match.group(1)} ms";
+      if (target.startsWith("http")) {
+        // HTTP Ping (Real Delay)
+        try {
+          final client = HttpClient();
+          client.connectionTimeout = const Duration(seconds: 5);
+          final request = await client.getUrl(Uri.parse(target));
+          final response = await request.close();
+          stopwatch.stop();
+          
+          if (response.statusCode == 204 || response.statusCode == 200) {
+            latency = "${stopwatch.elapsedMilliseconds} ms";
+          } else {
+            latency = "HTTP ${response.statusCode}";
+          }
+        } catch (e) {
+          latency = "Error";
+        }
+      } else {
+        // ICMP Ping
+        final result = await Process.run('ping', ['-c', '1', '-W', '2', target]);
+        stopwatch.stop();
+        
+        if (result.exitCode == 0) {
+          final RegExp regExp = RegExp(r"time=([0-9\.]+) ms");
+          final match = regExp.firstMatch(result.stdout.toString());
+          if (match != null) {
+            latency = "${match.group(1)} ms";
+          }
         }
       }
 
