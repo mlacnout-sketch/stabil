@@ -27,7 +27,87 @@ class DashboardTab extends StatefulWidget {
 }
 
 class _DashboardTabState extends State<DashboardTab> with SingleTickerProviderStateMixin {
-// ... (existing code) ...
+  String _pingResult = "";
+  bool _isPinging = false;
+  late AnimationController _pingAnimCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _pingAnimCtrl = AnimationController(
+      duration: const Duration(seconds: 1),
+      vsync: this,
+    );
+  }
+
+  @override
+  void dispose() {
+    _pingAnimCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _doPing() async {
+    if (_isPinging) return;
+
+    setState(() {
+      _isPinging = true;
+      _pingResult = "Pinging...";
+    });
+    _pingAnimCtrl.repeat();
+
+    final prefs = await SharedPreferences.getInstance();
+    final target = prefs.getString('ping_target') ?? "http://www.gstatic.com/generate_204";
+
+    final stopwatch = Stopwatch()..start();
+    String result = "Error";
+
+    try {
+      if (target.startsWith("http")) {
+        // Use HTTP Real Ping (Generate 204)
+        final client = HttpClient();
+        client.connectionTimeout = const Duration(seconds: 5);
+        final request = await client.getUrl(Uri.parse(target));
+        final response = await request.close();
+        stopwatch.stop();
+
+        if (response.statusCode == 204 || response.statusCode == 200) {
+          result = "${stopwatch.elapsedMilliseconds} ms";
+        } else {
+          result = "HTTP ${response.statusCode}";
+        }
+      } else {
+        // Fallback to ICMP
+        final proc = await Process.run('ping', ['-c', '1', '-W', '2', target]);
+        stopwatch.stop();
+        if (proc.exitCode == 0) {
+           final match = RegExp(r"time=([0-9\.]+) ms").firstMatch(proc.stdout.toString());
+           if (match != null) result = "${match.group(1)} ms";
+        } else {
+           result = "Timeout";
+        }
+      }
+    } catch (_) {
+      result = "Error";
+    }
+
+    if (mounted) {
+      setState(() {
+        _isPinging = false;
+        _pingResult = result;
+      });
+      _pingAnimCtrl.stop();
+      _pingAnimCtrl.reset();
+    }
+  }
+
+  String _formatTotalBytes(int bytes) {
+    if (bytes < 1024) return "$bytes B";
+    if (bytes < 1024 * 1024) return "${(bytes / 1024).toStringAsFixed(1)} KB";
+    if (bytes < 1024 * 1024 * 1024) {
+      return "${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB";
+    }
+    return "${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB";
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +120,16 @@ class _DashboardTabState extends State<DashboardTab> with SingleTickerProviderSt
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-// ... (header code) ...
+          const Text(
+            "ZIVPN",
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.5,
+            ),
+          ),
+          const Text("Turbo Tunnel Engine", style: TextStyle(color: Colors.grey)),
+          const SizedBox(height: 20),
           Expanded(
             child: Stack(
               alignment: Alignment.center,
@@ -117,8 +206,105 @@ class _DashboardTabState extends State<DashboardTab> with SingleTickerProviderSt
                 ),
                 // Ping Button & Result
                 if (isConnected)
-// ... (rest of code)
-
+                  Positioned(
+                    bottom: 20,
+                    right: 20,
+                    child: Column(
+                      children: [
+                        FloatingActionButton.small(
+                          onPressed: _doPing,
+                          backgroundColor: const Color(0xFF272736),
+                          child: RotationTransition(
+                            turns: _pingAnimCtrl,
+                            child: Icon(
+                              Icons.flash_on,
+                              color: _isPinging ? Colors.yellow : const Color(0xFF6C63FF),
+                            ),
+                          ),
+                        ),
+                        if (_pingResult.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              _pingResult,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: _pingResult.contains("ms") 
+                                    ? (int.tryParse(_pingResult.split(' ')[0]) ?? 999) < 150 
+                                        ? Colors.greenAccent 
+                                        : Colors.orangeAccent
+                                    : Colors.redAccent,
+                              ),
+                            ),
+                          ),
+                        ]
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 15),
+            decoration: BoxDecoration(
+              color: const Color(0xFF272736),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Text(
+                  "Session: ${_formatTotalBytes(widget.sessionRx + widget.sessionTx)}",
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+                Container(width: 1, height: 12, color: Colors.white10),
+                Text(
+                  "Rx: ${_formatTotalBytes(widget.sessionRx)}",
+                  style: const TextStyle(color: Colors.greenAccent, fontSize: 12),
+                ),
+                Container(width: 1, height: 12, color: Colors.white10),
+                Text(
+                  "Tx: ${_formatTotalBytes(widget.sessionTx)}",
+                  style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: StatCard(
+                  label: "Download",
+                  value: widget.dl,
+                  icon: Icons.download,
+                  color: Colors.green,
+                ),
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: StatCard(
+                  label: "Upload",
+                  value: widget.ul,
+                  icon: Icons.upload,
+                  color: Colors.orange,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+}
 
 class StatCard extends StatelessWidget {
   final String label, value;
