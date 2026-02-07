@@ -5,6 +5,11 @@ import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import android.app.PendingIntent
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import android.content.pm.ServiceInfo
 import java.net.InetAddress
 import java.util.LinkedList
 import androidx.annotation.Keep
@@ -26,6 +31,8 @@ class ZivpnService : VpnService() {
         const val ACTION_CONNECT = "com.minizivpn.app.CONNECT"
         const val ACTION_DISCONNECT = "com.minizivpn.app.DISCONNECT"
         const val ACTION_LOG = "com.minizivpn.app.LOG"
+        const val CHANNEL_ID = "ZIVPN_SERVICE_CHANNEL"
+        const val NOTIFICATION_ID = 1
     }
 
     private var vpnInterface: ParcelFileDescriptor? = null
@@ -36,6 +43,18 @@ class ZivpnService : VpnService() {
             if (message != null) {
                 logToApp("[Tun2Socks] $message")
             }
+        }
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val serviceChannel = NotificationChannel(
+                CHANNEL_ID,
+                "ZIVPN Service Channel",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val manager = getSystemService(NotificationManager::class.java)
+            manager?.createNotificationChannel(serviceChannel)
         }
     }
 
@@ -71,6 +90,27 @@ class ZivpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        createNotificationChannel()
+        
+        val notificationIntent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, notificationIntent,
+            PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("ZIVPN is Running")
+            .setContentText("Securing your connection...")
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+
         when (intent?.action) {
             ACTION_CONNECT -> {
                 connect()
@@ -294,6 +334,7 @@ class ZivpnService : VpnService() {
         val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
         prefs.edit().putBoolean("flutter.vpn_running", false).apply()
         
+        stopForeground(true)
         stopSelf()
     }
 
