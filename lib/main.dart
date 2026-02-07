@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'app_colors.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,18 +21,18 @@ class MiniZivpnApp extends StatelessWidget {
         useMaterial3: true,
         brightness: Brightness.dark,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6C63FF),
+          seedColor: AppColors.primary,
           brightness: Brightness.dark,
-          surface: const Color(0xFF1E1E2E),
+          surface: AppColors.surface,
         ),
-        scaffoldBackgroundColor: const Color(0xFF121218),
+        scaffoldBackgroundColor: AppColors.scaffoldBackground,
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent,
           elevation: 0,
           centerTitle: true,
         ),
         cardTheme: CardThemeData(
-          color: const Color(0xFF272736),
+          color: AppColors.cardBackground,
           elevation: 4,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
@@ -271,7 +272,7 @@ class _HomePageState extends State<HomePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Activated: ${account['name']}"),
-          backgroundColor: const Color(0xFF6C63FF),
+          backgroundColor: AppColors.primary,
           duration: const Duration(milliseconds: 800),
         ),
       );
@@ -282,7 +283,7 @@ class _HomePageState extends State<HomePage> {
         const SnackBar(
           content: Text("Switching account..."),
           duration: Duration(seconds: 1),
-          backgroundColor: Color(0xFF6C63FF),
+          backgroundColor: AppColors.primary,
         )
       );
       
@@ -341,8 +342,8 @@ class _HomePageState extends State<HomePage> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-        backgroundColor: const Color(0xFF1E1E2E),
-        indicatorColor: const Color(0xFF6C63FF).withValues(alpha: 0.2),
+        backgroundColor: AppColors.surface,
+        indicatorColor: AppColors.primary.withValues(alpha: 0.2),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
           NavigationDestination(icon: Icon(Icons.public_outlined), selectedIcon: Icon(Icons.public), label: 'Proxies'),
@@ -402,10 +403,10 @@ class DashboardTab extends StatelessWidget {
                   height: 240,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: isRunning ? const Color(0xFF6C63FF) : const Color(0xFF272736),
+                    color: isRunning ? AppColors.primary : AppColors.cardBackground,
                     boxShadow: [
                       BoxShadow(
-                        color: (isRunning ? const Color(0xFF6C63FF) : Colors.black).withValues(alpha: 0.4),
+                        color: (isRunning ? AppColors.primary : Colors.black).withValues(alpha: 0.4),
                         blurRadius: 30,
                         spreadRadius: 10,
                       )
@@ -462,7 +463,7 @@ class DashboardTab extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             margin: const EdgeInsets.only(bottom: 15),
             decoration: BoxDecoration(
-              color: const Color(0xFF272736),
+              color: AppColors.cardBackground,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
             ),
@@ -505,7 +506,7 @@ class StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF272736),
+        color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -560,7 +561,7 @@ class ProxiesTab extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF272736),
+        backgroundColor: AppColors.cardBackground,
         title: const Text("Add Account"),
         content: SingleChildScrollView(
           child: Column(
@@ -575,7 +576,7 @@ class ProxiesTab extends StatelessWidget {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6C63FF), foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
             onPressed: () {
               if (nameCtrl.text.isNotEmpty && ipCtrl.text.isNotEmpty) {
                 onAdd({
@@ -601,7 +602,7 @@ class ProxiesTab extends StatelessWidget {
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddDialog(context),
-        backgroundColor: const Color(0xFF6C63FF),
+        backgroundColor: AppColors.primary,
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: accounts.isEmpty 
@@ -627,17 +628,17 @@ class ProxiesTab extends StatelessWidget {
                   margin: const EdgeInsets.only(bottom: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
-                    side: isSelected ? const BorderSide(color: Color(0xFF6C63FF), width: 2) : BorderSide.none,
+                    side: isSelected ? const BorderSide(color: AppColors.primary, width: 2) : BorderSide.none,
                   ),
                   child: ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     leading: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: isSelected ? const Color(0xFF6C63FF) : const Color(0xFF6C63FF).withValues(alpha: 0.1),
+                        color: isSelected ? AppColors.primary : AppColors.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(Icons.dns, color: isSelected ? Colors.white : const Color(0xFF6C63FF)),
+                      child: Icon(Icons.dns, color: isSelected ? Colors.white : AppColors.primary),
                     ),
                     title: Text(acc['name'] ?? "Unknown", style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Column(
@@ -712,7 +713,7 @@ class LogsTab extends StatelessWidget {
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF0F0F12),
+              color: AppColors.logBackground,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.white10),
             ),
@@ -868,7 +869,7 @@ class _SettingsTabState extends State<SettingsTab> {
           icon: const Icon(Icons.save),
           label: const Text("Save Configuration"),
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF6C63FF),
+            backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
           ),
@@ -885,7 +886,7 @@ class _SettingsTabState extends State<SettingsTab> {
         prefixIcon: Icon(icon),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         filled: true,
-        fillColor: const Color(0xFF272736),
+        fillColor: AppColors.cardBackground,
       ),
     );
   }
