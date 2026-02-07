@@ -139,7 +139,8 @@ func (t *Tunnel) handleBadVPN(uc adapter.UDPConn, metadata *M.Metadata) {
 	log.Infof("[UDPGW] Tunneling %s <-> %s", metadata.SourceAddress(), metadata.DestinationAddress())
 
 	// Prepare remote address
-	dstIP := net.ParseIP(metadata.DstIP)
+	// metadata.DstIP is netip.Addr, convert to net.IP slice
+	dstIP := net.IP(metadata.DstIP.AsSlice())
 	dstPort := metadata.DstPort
 
 	// Pipe: UC -> BadVPN
