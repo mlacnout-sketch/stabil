@@ -2,7 +2,7 @@ name: ZIVPN Production Build
 
 on:
   push:
-    branches: [ "main", "feat/tun2socks-integration", "refactor/ui-cleanup", "update-repo" ]
+    branches: [ "main", "refactor-extract-color-constants-11187820034686362154", "refactor/ui-cleanup", "update-repo" ]
   workflow_dispatch:
 
 jobs:
