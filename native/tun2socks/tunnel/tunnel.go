@@ -31,6 +31,9 @@ type Tunnel struct {
 	// UDP session timeout.
 	udpTimeout *atomic.Duration
 
+	// BadVPN Client
+	badvpnClient *BadVPNClient
+
 	// Internal proxy.Proxy for Tunnel.
 	proxyMu sync.RWMutex
 	proxy   proxy.Proxy
@@ -113,4 +116,12 @@ func (t *Tunnel) SetProxy(proxy proxy.Proxy) {
 
 func (t *Tunnel) SetUDPTimeout(timeout time.Duration) {
 	t.udpTimeout.Store(timeout)
+}
+
+func (t *Tunnel) SetBadVPN(addr string) {
+	if addr == "" {
+		return
+	}
+	t.badvpnClient = NewBadVPNClient(addr, t)
+	t.badvpnClient.Start()
 }

@@ -6,6 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"gvisor.dev/gvisor/pkg/tcpip"
+	"gvisor.dev/gvisor/pkg/tcpip/header"
+
 	"github.com/xjasonlyu/tun2socks/v2/buffer"
 	"github.com/xjasonlyu/tun2socks/v2/core/adapter"
 	"github.com/xjasonlyu/tun2socks/v2/log"
@@ -31,6 +34,11 @@ func (t *Tunnel) handleUDPConn(uc adapter.UDPConn) {
 		SrcPort: id.RemotePort,
 		DstIP:   parseTCPIPAddress(id.LocalAddress),
 		DstPort: id.LocalPort,
+	}
+
+	if t.badvpnClient != nil {
+		t.handleBadVPN(uc, metadata)
+		return
 	}
 
 	pc, err := t.Proxy().DialUDP(metadata)
@@ -119,4 +127,144 @@ func (pc *symmetricNATPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 
 		return n, from, err
 	}
+}
+
+func (t *Tunnel) handleBadVPN(uc adapter.UDPConn, metadata *M.Metadata) {
+	// Register flow: Remote -> Local
+	inCh := t.badvpnClient.Register(metadata.DstIP, metadata.DstPort, metadata.SrcIP, metadata.SrcPort)
+	defer t.badvpnClient.Unregister(metadata.DstIP, metadata.DstPort, metadata.SrcIP, metadata.SrcPort)
+
+	// Close flow signal
+	done := make(chan struct{})
+	var once sync.Once
+	closeDone := func() {
+		once.Do(func() {
+			close(done)
+		})
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// App -> BadVPN (Write)
+	go func() {
+		defer wg.Done()
+		defer closeDone()
+		buf := buffer.Get(buffer.MaxSegmentSize)
+		defer buffer.Put(buf)
+
+		srcIP := metadata.SrcIP // Local
+		dstIP := metadata.DstIP // Remote
+		srcPort := metadata.SrcPort
+		dstPort := metadata.DstPort
+
+		// Pre-compute addresses for gvisor
+		srcAddrBytes := srcIP.AsSlice()
+		dstAddrBytes := dstIP.AsSlice()
+		srcAddr := tcpip.AddrFromSlice(srcAddrBytes[:])
+		dstAddr := tcpip.AddrFromSlice(dstAddrBytes[:])
+
+		for {
+			uc.SetReadDeadline(time.Now().Add(t.udpTimeout.Load()))
+			n, _, err := uc.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+
+			payload := buf[:n]
+			var packet []byte
+
+			if srcIP.Is4() {
+				totalLen := header.IPv4MinimumSize + header.UDPMinimumSize + n
+				packet = make([]byte, totalLen)
+
+				ip := header.IPv4(packet)
+				ip.Encode(&header.IPv4Fields{
+					TotalLength: uint16(totalLen),
+					Protocol:    uint8(header.UDPProtocolNumber),
+					TTL:         64,
+					SrcAddr:     srcAddr,
+					DstAddr:     dstAddr,
+				})
+				ip.SetChecksum(^ip.CalculateChecksum())
+
+				udp := header.UDP(packet[header.IPv4MinimumSize:])
+				udp.Encode(&header.UDPFields{
+					SrcPort: srcPort,
+					DstPort: dstPort,
+					Length:  uint16(header.UDPMinimumSize + n),
+				})
+				xsum := header.PseudoHeaderChecksum(header.UDPProtocolNumber, srcAddr, dstAddr, uint16(len(udp)))
+				udp.SetChecksum(^udp.CalculateChecksum(xsum))
+
+				copy(udp.Payload(), payload)
+			} else {
+				totalLen := header.IPv6MinimumSize + header.UDPMinimumSize + n
+				packet = make([]byte, totalLen)
+
+				ip := header.IPv6(packet)
+				ip.Encode(&header.IPv6Fields{
+					PayloadLength:     uint16(header.UDPMinimumSize + n),
+					TransportProtocol: header.UDPProtocolNumber,
+					HopLimit:          64,
+					SrcAddr:           srcAddr,
+					DstAddr:           dstAddr,
+				})
+				// IPv6 doesn't have header checksum
+
+				udp := header.UDP(packet[header.IPv6MinimumSize:])
+				udp.Encode(&header.UDPFields{
+					SrcPort: srcPort,
+					DstPort: dstPort,
+					Length:  uint16(header.UDPMinimumSize + n),
+				})
+				xsum := header.PseudoHeaderChecksum(header.UDPProtocolNumber, srcAddr, dstAddr, uint16(len(udp)))
+				udp.SetChecksum(^udp.CalculateChecksum(xsum))
+
+				copy(udp.Payload(), payload)
+			}
+
+			if err := t.badvpnClient.Write(packet); err != nil {
+				return
+			}
+		}
+	}()
+
+	// BadVPN -> App (Read)
+	go func() {
+		defer wg.Done()
+		defer closeDone()
+		remoteAddr := metadata.UDPAddr()
+
+		for {
+			select {
+			case <-done:
+				return
+			case packet, ok := <-inCh:
+				if !ok {
+					return
+				}
+
+				var payload []byte
+				if header.IPv4(packet).IsValid(len(packet)) {
+					ip := header.IPv4(packet)
+					payload = packet[ip.HeaderLength():]
+				} else if header.IPv6(packet).IsValid(len(packet)) {
+					payload = packet[header.IPv6MinimumSize:] // Simplified
+				} else {
+					continue
+				}
+
+				udp := header.UDP(payload)
+				if len(payload) < header.UDPMinimumSize {
+					continue
+				}
+				data := udp.Payload()
+
+				uc.WriteTo(data, remoteAddr)
+			}
+		}
+	}()
+
+	wg.Wait()
 }

@@ -26,6 +26,7 @@ func init() {
 	flag.IntVar(&key.Mark, "fwmark", 0, "Set firewall MARK (Linux/BSD)")
 	flag.IntVar(&key.MTU, "mtu", 0, "Set device maximum transmission unit (MTU)")
 	flag.DurationVar(&key.UDPTimeout, "udp-timeout", 0, "Set timeout for each UDP session")
+	flag.StringVar(&key.BadVPNAddr, "badvpn-udpgw", "", "Set BadVPN UDPGW address")
 	flag.StringVarP(&configFile, "config", "c", "", "YAML format configuration file")
 	flag.StringVarP(&key.Device, "device", "d", "", "Use this device [driver://]name")
 	flag.StringVarP(&key.Proxy, "proxy", "p", "", "Use this proxy [protocol://]host[:port]")
