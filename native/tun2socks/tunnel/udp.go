@@ -13,7 +13,6 @@ import (
 	"github.com/xjasonlyu/tun2socks/v2/tunnel/statistic"
 )
 
-// TODO: Port Restricted NAT support.
 func (t *Tunnel) handleUDPConn(uc adapter.UDPConn) {
 	defer uc.Close()
 
@@ -42,7 +41,7 @@ func (t *Tunnel) handleUDPConn(uc adapter.UDPConn) {
 	} else {
 		remote = metadata.Addr()
 	}
-	pc = newSymmetricNATPacketConn(pc, metadata)
+	pc = newRestrictedNATPacketConn(pc, metadata)
 
 	log.Infof("[UDP] %s <-> %s", metadata.SourceAddress(), metadata.DestinationAddress())
 	pipePacket(uc, pc, remote, t.udpTimeout.Load())
@@ -87,29 +86,3 @@ func copyPacketData(dst, src net.PacketConn, to net.Addr, timeout time.Duration)
 	}
 }
 
-type symmetricNATPacketConn struct {
-	net.PacketConn
-	src string
-	dst string
-}
-
-func newSymmetricNATPacketConn(pc net.PacketConn, metadata *M.Metadata) *symmetricNATPacketConn {
-	return &symmetricNATPacketConn{
-		PacketConn: pc,
-		src:        metadata.SourceAddress(),
-		dst:        metadata.DestinationAddress(),
-	}
-}
-
-func (pc *symmetricNATPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
-	for {
-		n, from, err := pc.PacketConn.ReadFrom(p)
-
-		if from != nil && from.String() != pc.dst {
-			log.Warnf("[UDP] symmetric NAT %s->%s: drop packet from %s", pc.src, pc.dst, from)
-			continue
-		}
-
-		return n, from, err
-	}
-}

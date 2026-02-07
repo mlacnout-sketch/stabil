@@ -1,6 +1,8 @@
 module github.com/xjasonlyu/tun2socks/v2
 
-go 1.22
+go 1.24.1
+
+toolchain go1.24.3
 
 require (
 	github.com/docker/go-units v0.5.0
@@ -30,6 +32,7 @@ require (
 	github.com/google/btree v1.1.3 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
