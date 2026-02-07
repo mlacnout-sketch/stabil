@@ -268,6 +268,7 @@ class _HomePageState extends State<HomePage> {
           "udp_mode": "udp",
           "mtu": int.tryParse(prefs.getString('mtu') ?? "1200") ?? 1200,
           "auto_tuning": prefs.getBool('auto_tuning') ?? true,
+          "enable_badvpn": prefs.getBool('enable_badvpn') ?? false, // New Param
           "buffer_size": prefs.getString('buffer_size') ?? "4m",
           "log_level": prefs.getString('log_level') ?? "info",
           "core_count": (prefs.getInt('core_count') ?? 4)

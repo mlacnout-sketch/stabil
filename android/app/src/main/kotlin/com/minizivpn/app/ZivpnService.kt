@@ -148,6 +148,8 @@ class ZivpnService : VpnService() {
         val bufferSize = prefs.getString("buffer_size", "4m") ?: "4m"
         val logLevel = prefs.getString("log_level", "info") ?: "info"
         val coreCount = prefs.getInt("core_count", 4)
+        val enableBadVPN = prefs.getBoolean("enable_badvpn", false)
+        val udpgwAddr = if (enableBadVPN) "127.0.0.1:7300" else ""
 
         // 1. START HYSTERIA & LOAD BALANCER
         try {
@@ -167,16 +169,28 @@ class ZivpnService : VpnService() {
         val builder = Builder()
         builder.setSession("MiniZivpn")
         builder.setConfigureIntent(pendingIntent)
-        builder.setMtu(mtu)
+        
+        // Fix: Use 1280 (Safe MTU) if user sets higher than standard, 
+        // because double encapsulation (VPN + Obfs) adds overhead.
+        val safeMtu = if (mtu > 1400) 1280 else mtu
+        builder.setMtu(safeMtu)
+        
+        // Fix: Force IPv4 only. Prevents IPv6 leaks/timeouts on modern Androids.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            builder.allowFamily(android.system.OsConstants.AF_INET)
+        }
         
         // GLOBAL ROUTING: Catch EVERYTHING
+        // Fix: Use granular subnets instead of 0.0.0.0/0 directly.
+        // This is a known workaround for some Android ROMs/Netguard conflicts where
+        // global routing fails or causes loops even with disallowed applications.
         try {
-            builder.addRoute("0.0.0.0", 0)
-            // Handle Fake-IP range (198.18.0.0/15) to prevent "host unreachable" errors
+            // builder.addRoute("0.0.0.0", 0) <-- DISABLED
+            
+            // Handle Fake-IP range (198.18.0.0/15)
             builder.addRoute("198.18.0.0", 15)
-        } catch (e: Exception) {
-            Log.e("ZIVPN-Tun", "Failed to add global route, falling back to subnets")
-            // Fallback to stable subnets if 0.0.0.0/0 is rejected by system
+            
+            // Primary Routing Strategy: Subnet Coverage
             val subnets = listOf(
                 "0.0.0.0" to 5, "8.0.0.0" to 7, "11.0.0.0" to 8, "12.0.0.0" to 6,
                 "16.0.0.0" to 4, "32.0.0.0" to 3, "64.0.0.0" to 2, "128.0.0.0" to 3,
@@ -188,23 +202,31 @@ class ZivpnService : VpnService() {
             for ((addr, mask) in subnets) {
                 try { builder.addRoute(addr, mask) } catch (ex: Exception) {}
             }
+        } catch (e: Exception) {
+            Log.e("ZIVPN-Tun", "Failed to add routes: ${e.message}")
         }
         
-        // Intercept common DNS IPs to prevent leaks
+        // Intercept common DNS IPs
         val dnsToHijack = listOf(
-            "1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4", "9.9.9.9", 
-            "149.112.112.112", "208.67.222.222", "208.67.220.220",
+            "1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4", "9.9.9.9",
             "112.215.198.248", "112.215.198.249" // Common ISP DNS (XL/Tsel)
         )
         for (dns in dnsToHijack) {
             try { builder.addRoute(dns, 32) } catch (e: Exception) {}
         }
 
+        // CRITICAL: Exclude app itself to prevent VPN Loop
         try {
-            builder.addDisallowedApplication(packageName)
-        } catch (e: Exception) {}
+            // Explicitly disallow self by package name to ensure no ambiguity
+            builder.addDisallowedApplication("com.minizivpn.app")
+            // Also try context.packageName just in case
+            if (packageName != "com.minizivpn.app") {
+                builder.addDisallowedApplication(packageName)
+            }
+        } catch (e: Exception) {
+            Log.e("ZIVPN-Tun", "Failed to disallow package: ${e.message}")
+        }
 
-        builder.addDnsServer("1.1.1.1")
         builder.addDnsServer("8.8.8.8")
         builder.addAddress("172.19.0.1", 30)
 
@@ -212,14 +234,14 @@ class ZivpnService : VpnService() {
             vpnInterface = builder.establish()
             val fd = vpnInterface?.fd ?: return
 
-            Log.i("ZIVPN-Tun", "VPN Interface established. FD: $fd")
+            Log.i("ZIVPN-Tun", "VPN Interface established. FD: $fd, MTU: $safeMtu")
 
             // 3. Start tun2socks (Go/gVisor Engine) via JNI
             Thread {
                 try {
                     val udpTimeout = 60000L
-                    val finalMtu = mtu.toLong()
-                    logToApp("Starting Engine: MTU=$finalMtu, Buf=$bufferSize, AutoTune=$autoTuning, Log=$logLevel")
+                    val finalMtu = safeMtu.toLong()
+                    logToApp("Starting Engine: MTU=$finalMtu, Buf=$bufferSize, AutoTune=$autoTuning, Log=$logLevel, UDPGW=$udpgwAddr")
                     mobile.Mobile.setLogHandler(tunLogger)
                     mobile.Mobile.start(
                         "socks5://127.0.0.1:7777",
@@ -229,7 +251,8 @@ class ZivpnService : VpnService() {
                         udpTimeout,
                         bufferSize, 
                         bufferSize, 
-                        autoTuning
+                        autoTuning,
+                        udpgwAddr
                     )
                     logToApp("Tun2Socks Engine Started successfully.")
                 } catch (e: Exception) {

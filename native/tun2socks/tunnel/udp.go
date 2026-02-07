@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xjasonlyu/tun2socks/v2/badvpn"
 	"github.com/xjasonlyu/tun2socks/v2/buffer"
 	"github.com/xjasonlyu/tun2socks/v2/core/adapter"
 	"github.com/xjasonlyu/tun2socks/v2/log"
@@ -31,6 +32,12 @@ func (t *Tunnel) handleUDPConn(uc adapter.UDPConn) {
 		SrcPort: id.RemotePort,
 		DstIP:   parseTCPIPAddress(id.LocalAddress),
 		DstPort: id.LocalPort,
+	}
+
+	// BadVPN/UDPGW Support
+	if t.udpgwRemote != "" {
+		t.handleBadVPN(uc, metadata)
+		return
 	}
 
 	pc, err := t.Proxy().DialUDP(metadata)
@@ -118,5 +125,52 @@ func (pc *symmetricNATPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 		}
 
 		return n, from, err
+	}
+}
+
+func (t *Tunnel) handleBadVPN(uc adapter.UDPConn, metadata *M.Metadata) {
+	client, err := badvpn.NewClient(t.udpgwRemote)
+	if err != nil {
+		log.Warnf("[UDPGW] Failed to connect to %s: %v", t.udpgwRemote, err)
+		return
+	}
+	defer client.Close()
+
+	log.Infof("[UDPGW] Tunneling %s <-> %s", metadata.SourceAddress(), metadata.DestinationAddress())
+
+	// Prepare remote address
+	dstIP := net.ParseIP(metadata.DstIP)
+	dstPort := metadata.DstPort
+
+	// Pipe: UC -> BadVPN
+	go func() {
+		buf := buffer.Get(buffer.MaxSegmentSize)
+		defer buffer.Put(buf)
+		
+		for {
+			uc.SetReadDeadline(time.Now().Add(t.udpTimeout.Load()))
+			n, _, err := uc.ReadFrom(buf)
+			if err != nil {
+				client.Close()
+				return
+			}
+			
+			if err := client.WriteUDPGW(dstIP, dstPort, buf[:n]); err != nil {
+				return
+			}
+		}
+	}()
+
+	// Pipe: BadVPN -> UC
+	for {
+		data, err := client.ReadUDPGW()
+		if err != nil {
+			break
+		}
+		
+		// BadVPN protocol doesn't include source IP in response payload typically,
+		// it assumes the client knows who it talked to.
+		// We just write back to UC.
+		_, _ = uc.WriteTo(data, nil)
 	}
 }

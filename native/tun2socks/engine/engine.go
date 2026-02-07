@@ -148,6 +148,11 @@ func general(k *Key) error {
 		}
 		tunnel.T().SetUDPTimeout(k.UDPTimeout)
 	}
+	
+	if k.UDPGWRemote != "" {
+		tunnel.T().SetUDPGWRemote(k.UDPGWRemote)
+		log.Infof("[ENGINE] UDPGW Enabled: %s", k.UDPGWRemote)
+	}
 	return nil
 }
 

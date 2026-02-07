@@ -16,6 +16,7 @@ class _SettingsTabState extends State<SettingsTab> {
   final _pingTargetCtrl = TextEditingController();
 
   bool _autoTuning = true;
+  bool _enableBadVPN = false; // New Setting
   String _bufferSize = "4m";
   String _logLevel = "info";
   double _coreCount = 4.0;
@@ -39,6 +40,7 @@ class _SettingsTabState extends State<SettingsTab> {
       _mtuCtrl.text = prefs.getString('mtu') ?? "1200";
       _pingTargetCtrl.text = prefs.getString('ping_target') ?? "http://www.gstatic.com/generate_204";
       _autoTuning = prefs.getBool('auto_tuning') ?? true;
+      _enableBadVPN = prefs.getBool('enable_badvpn') ?? false; // Load
       _bufferSize = prefs.getString('buffer_size') ?? "4m";
       _logLevel = prefs.getString('log_level') ?? "info";
       _coreCount = (prefs.getInt('core_count') ?? 4).toDouble();
@@ -50,6 +52,7 @@ class _SettingsTabState extends State<SettingsTab> {
     await prefs.setString('mtu', _mtuCtrl.text);
     await prefs.setString('ping_target', _pingTargetCtrl.text);
     await prefs.setBool('auto_tuning', _autoTuning);
+    await prefs.setBool('enable_badvpn', _enableBadVPN); // Save
     await prefs.setString('buffer_size', _bufferSize);
     await prefs.setString('log_level', _logLevel);
     await prefs.setInt('core_count', _coreCount.toInt());
@@ -95,6 +98,13 @@ class _SettingsTabState extends State<SettingsTab> {
                   subtitle: const Text("Dynamic buffer sizing for stability"),
                   value: _autoTuning,
                   onChanged: (val) => setState(() => _autoTuning = val),
+                ),
+                const Divider(),
+                SwitchListTile(
+                  title: const Text("Enable BadVPN (UDPGW)"),
+                  subtitle: const Text("Use Port 7300 for UDP Games/Calls"),
+                  value: _enableBadVPN,
+                  onChanged: (val) => setState(() => _enableBadVPN = val),
                 ),
                 const Divider(),
                 _buildDropdownTile(

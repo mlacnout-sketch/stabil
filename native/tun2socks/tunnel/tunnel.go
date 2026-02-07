@@ -30,6 +30,9 @@ type Tunnel struct {
 
 	// UDP session timeout.
 	udpTimeout *atomic.Duration
+	
+	// BadVPN/UDPGW Remote Address (e.g. "127.0.0.1:7300")
+	udpgwRemote string
 
 	// Internal proxy.Proxy for Tunnel.
 	proxyMu sync.RWMutex
@@ -113,4 +116,8 @@ func (t *Tunnel) SetProxy(proxy proxy.Proxy) {
 
 func (t *Tunnel) SetUDPTimeout(timeout time.Duration) {
 	t.udpTimeout.Store(timeout)
+}
+
+func (t *Tunnel) SetUDPGWRemote(addr string) {
+	t.udpgwRemote = addr
 }

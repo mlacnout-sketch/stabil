@@ -21,7 +21,7 @@ func SetLogHandler(h LogHandler) {
 
 // Start starts the tun2socks engine with the given parameters.
 // udpTimeout is in milliseconds.
-func Start(proxy, device, loglevel string, mtu int, udpTimeout int64, snb, rcb string, autotune bool) error {
+func Start(proxy, device, loglevel string, mtu int, udpTimeout int64, snb, rcb string, autotune bool, udpgwRemote string) error {
 	// Optimization: Set GC target to 20% to keep RAM usage low on mobile devices
 	debug.SetGCPercent(20)
 
@@ -34,6 +34,7 @@ func Start(proxy, device, loglevel string, mtu int, udpTimeout int64, snb, rcb s
 		TCPSendBufferSize:        snb,
 		TCPReceiveBufferSize:     rcb,
 		TCPModerateReceiveBuffer: autotune,
+		UDPGWRemote:              udpgwRemote,
 	}
 	
 	// Start internal HTTP Proxy for app updates (Bypass mode support)
