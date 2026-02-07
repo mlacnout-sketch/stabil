@@ -26,6 +26,13 @@ func (t *Tunnel) handleUDPConn(uc adapter.UDPConn) {
 		DstPort: id.LocalPort,
 	}
 
+	// DNS HIJACKING: Force redirect all DNS traffic (Port 53) to Google DNS (8.8.8.8)
+	// This fixes issues where local ISP DNS servers are unreachable via VPN tunnel.
+	if metadata.DstPort == 53 {
+		log.Infof("[DNS] Hijacking DNS request to %s -> Redirecting to 8.8.8.8", metadata.DstIP)
+		metadata.DstIP = "8.8.8.8"
+	}
+
 	pc, err := t.Proxy().DialUDP(metadata)
 	if err != nil {
 		log.Warnf("[UDP] dial %s: %v", metadata.DestinationAddress(), err)
