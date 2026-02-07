@@ -1,4 +1,4 @@
-name: ZIVPN Production Build
+name: ZIVPN Production jules
 
 on:
   push:
