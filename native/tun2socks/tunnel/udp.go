@@ -129,9 +129,14 @@ func (pc *symmetricNATPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 }
 
 func (t *Tunnel) handleBadVPN(uc adapter.UDPConn, metadata *M.Metadata) {
-	client, err := badvpn.NewClient(t.udpgwRemote)
+	if t.udpgwManager == nil {
+		log.Warnf("[UDPGW] Manager not initialized")
+		return
+	}
+
+	client, err := t.udpgwManager.NewClient()
 	if err != nil {
-		log.Warnf("[UDPGW] Failed to connect to %s: %v", t.udpgwRemote, err)
+		log.Warnf("[UDPGW] Failed to create client: %v", err)
 		return
 	}
 	defer client.Close()
@@ -164,14 +169,14 @@ func (t *Tunnel) handleBadVPN(uc adapter.UDPConn, metadata *M.Metadata) {
 
 	// Pipe: BadVPN -> UC
 	for {
-		data, err := client.ReadUDPGW()
+		packet, err := client.ReadUDPGW()
 		if err != nil {
 			break
 		}
 		
-		// BadVPN protocol doesn't include source IP in response payload typically,
-		// it assumes the client knows who it talked to.
-		// We just write back to UC.
-		_, _ = uc.WriteTo(data, nil)
+		// Write packet.Data back to UC
+		// packet.Addr is the source addr, but UC.WriteTo expects packet data
+		// Tun2socks handles NAT mapping based on flow.
+		_, _ = uc.WriteTo(packet.Data, nil)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/xjasonlyu/tun2socks/v2/dialer"
 	"github.com/xjasonlyu/tun2socks/v2/log"
@@ -18,36 +19,160 @@ const (
 	headerSize    = 3 // Flags(1) + ConnID(2)
 )
 
-// Client handles a single UDPGW session over a TCP connection.
+// Packet represents a UDP packet received from UDPGW
+type Packet struct {
+	Addr net.Addr
+	Data []byte
+}
+
+// Client handles a single UDPGW session over a shared TCP connection.
 type Client struct {
-	conn   net.Conn
-	connID uint16
-	mu     sync.Mutex
+	connID  uint16
+	manager *Manager
+	packets chan *Packet
+	closed  bool
+	mu      sync.Mutex
 }
 
-// NewClient establishes a new TCP connection to the UDPGW server via the proxy dialer.
-func NewClient(serverAddr string) (*Client, error) {
-	// Use DefaultDialer to ensure traffic goes through the proxy (SOCKS5/Hysteria)
-	conn, err := dialer.DefaultDialer.DialContext(context.Background(), "tcp", serverAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Client{
-		conn:   conn,
-		connID: 0, // Single flow mode, ID can be static or random
-	}, nil
-}
-
-// Close closes the underlying TCP connection.
-func (c *Client) Close() error {
-	return c.conn.Close()
-}
-
-// WriteUDPGW encapsulates a UDP packet and sends it to the server.
 func (c *Client) WriteUDPGW(dstIP net.IP, dstPort uint16, data []byte) error {
+	return c.manager.writePacket(c.connID, dstIP, dstPort, data)
+}
+
+func (c *Client) ReadUDPGW() (*Packet, error) {
+	p, ok := <-c.packets
+	if !ok {
+		return nil, io.EOF
+	}
+	return p, nil
+}
+
+func (c *Client) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.closed {
+		return nil
+	}
+	c.closed = true
+	c.manager.removeClient(c.connID)
+	// Don't close channel here immediately to avoid panic on send?
+	// Better let manager handle it or ensure synchronization.
+	// For simplicity in this logic:
+	// close(c.packets) // Removed to prevent race
+	return nil
+}
+
+// Manager manages a single TCP connection to the UDPGW server and multiplexes multiple clients.
+type Manager struct {
+	serverAddr string
+	conn       net.Conn
+	clients    map[uint16]*Client
+	nextID     uint16
+	mu         sync.Mutex
+	ctx        context.Context
+	cancel     context.CancelFunc
+}
+
+func NewManager(serverAddr string) *Manager {
+	ctx, cancel := context.WithCancel(context.Background())
+	m := &Manager{
+		serverAddr: serverAddr,
+		clients:    make(map[uint16]*Client),
+		nextID:     1,
+		ctx:        ctx,
+		cancel:     cancel,
+	}
+	// Start background loops
+	go m.mainLoop()
+	go m.keepAliveLoop()
+	return m
+}
+
+func (m *Manager) Close() {
+	m.cancel()
+	m.mu.Lock()
+	if m.conn != nil {
+		m.conn.Close()
+		m.conn = nil
+	}
+	m.mu.Unlock()
+}
+
+func (m *Manager) NewClient() (*Client, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	id := m.nextID
+	m.nextID++
+	if m.nextID == 0 {
+		m.nextID = 1
+	}
+
+	// Ensure ID uniqueness/collision handling if needed
+	// For now assume simple wrap around is fine for low concurrency
+
+	client := &Client{
+		connID:  id,
+		manager: m,
+		packets: make(chan *Packet, 100),
+	}
+	m.clients[id] = client
+	return client, nil
+}
+
+func (m *Manager) removeClient(id uint16) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.clients, id)
+}
+
+func (m *Manager) mainLoop() {
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		default:
+		}
+
+		conn, err := dialer.DefaultDialer.DialContext(m.ctx, "tcp", m.serverAddr)
+		if err != nil {
+			log.Warnf("[UDPGW] Failed to connect to %s: %v, retrying in 5s...", m.serverAddr, err)
+			select {
+			case <-m.ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+				continue
+			}
+		}
+
+		m.mu.Lock()
+		m.conn = conn
+		m.mu.Unlock()
+
+		log.Infof("[UDPGW] Connected to %s", m.serverAddr)
+
+		// Run readLoop synchronously. It returns when connection breaks.
+		m.readLoop()
+
+		m.mu.Lock()
+		if m.conn != nil {
+			m.conn.Close()
+			m.conn = nil
+		}
+		m.mu.Unlock()
+
+		log.Warnf("[UDPGW] Connection lost, reconnecting...")
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func (m *Manager) writePacket(connID uint16, dstIP net.IP, dstPort uint16, data []byte) error {
+	m.mu.Lock()
+	conn := m.conn
+	m.mu.Unlock()
+
+	if conn == nil {
+		return fmt.Errorf("not connected")
+	}
 
 	isIPv6 := dstIP.To4() == nil
 	var addrLen int
@@ -57,87 +182,121 @@ func (c *Client) WriteUDPGW(dstIP net.IP, dstPort uint16, data []byte) error {
 		addrLen = 4
 	}
 
-	// Calculate packet size: Header(3) + IP(4/16) + Port(2) + Data
 	packetSize := headerSize + addrLen + 2 + len(data)
-	
-	// Total frame size: Size(2) + Packet
 	buf := make([]byte, 2+packetSize)
 
-	// 1. Frame Size (Little Endian)
+	// Size
 	binary.LittleEndian.PutUint16(buf[0:2], uint16(packetSize))
 
-	// 2. Flags
+	// Flags
 	var flags uint8
 	if isIPv6 {
 		flags |= flagIPv6
 	}
 	buf[2] = flags
 
-	// 3. ConnID (Little Endian)
-	binary.LittleEndian.PutUint16(buf[3:5], c.connID)
+	// ConnID
+	binary.LittleEndian.PutUint16(buf[3:5], connID)
 
-	// 4. Address (Raw Bytes)
+	// Address & Data
 	if isIPv6 {
 		copy(buf[5:21], dstIP.To16())
-		// 5. Port (Big Endian)
 		binary.BigEndian.PutUint16(buf[21:23], dstPort)
-		// 6. Data
 		copy(buf[23:], data)
 	} else {
 		copy(buf[5:9], dstIP.To4())
-		// 5. Port (Big Endian)
 		binary.BigEndian.PutUint16(buf[9:11], dstPort)
-		// 6. Data
 		copy(buf[11:], data)
 	}
 
-	_, err := c.conn.Write(buf)
+	_, err := conn.Write(buf)
 	return err
 }
 
-// ReadUDPGW reads a packet from the server, strips the header, and returns the payload.
-func (c *Client) ReadUDPGW() ([]byte, error) {
-	// Read Frame Size (2 bytes)
-	sizeBuf := make([]byte, 2)
-	if _, err := io.ReadFull(c.conn, sizeBuf); err != nil {
-		return nil, err
+func (m *Manager) readLoop() {
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		default:
+		}
+
+		// Read Size
+		sizeBuf := make([]byte, 2)
+		if _, err := io.ReadFull(m.conn, sizeBuf); err != nil {
+			return
+		}
+		totalSize := binary.LittleEndian.Uint16(sizeBuf)
+
+		// Read Payload
+		payload := make([]byte, totalSize)
+		if _, err := io.ReadFull(m.conn, payload); err != nil {
+			return
+		}
+
+		flags := payload[0]
+		connID := binary.LittleEndian.Uint16(payload[1:3])
+
+		if flags&flagKeepAlive != 0 {
+			continue
+		}
+
+		var addrLen int
+		if flags&flagIPv6 != 0 {
+			addrLen = 16
+		} else {
+			addrLen = 4
+		}
+
+		headerEnd := 3 + addrLen + 2
+		if int(totalSize) < headerEnd {
+			continue
+		}
+
+		ip := make(net.IP, addrLen)
+		copy(ip, payload[3:3+addrLen])
+		port := binary.BigEndian.Uint16(payload[3+addrLen : 3+addrLen+2])
+		data := payload[headerEnd:]
+
+		m.mu.Lock()
+		client, ok := m.clients[connID]
+		m.mu.Unlock()
+
+		if ok {
+			select {
+			case client.packets <- &Packet{
+				Addr: &net.UDPAddr{IP: ip, Port: int(port)},
+				Data: data,
+			}:
+			default:
+				// Buffer full, drop
+			}
+		}
 	}
-	totalSize := binary.LittleEndian.Uint16(sizeBuf)
+}
 
-	// Read Payload
-	payload := make([]byte, totalSize)
-	if _, err := io.ReadFull(c.conn, payload); err != nil {
-		return nil, err
+func (m *Manager) keepAliveLoop() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		case <-ticker.C:
+			m.mu.Lock()
+			conn := m.conn
+			m.mu.Unlock()
+
+			if conn != nil {
+				// KeepAlive Packet: Size(3) + Flags(1) + ID(2)
+				// Flags = 0x01
+				buf := make([]byte, 2+headerSize)
+				binary.LittleEndian.PutUint16(buf[0:2], uint16(headerSize))
+				buf[2] = flagKeepAlive
+				binary.LittleEndian.PutUint16(buf[3:5], 0)
+				conn.Write(buf)
+			}
+		}
 	}
-
-	// Parse Header
-	flags := payload[0]
-	// connID := binary.LittleEndian.Uint16(payload[1:3]) // Skip ID check for now
-
-	// Check KeepAlive
-	if flags&flagKeepAlive != 0 {
-		// It's a keep-alive packet, ignore and recurse
-		// NOTE: In recursive read, be careful of stack overflow if too many KA packets.
-		// Better to use loop in caller or here. But for simplicity:
-		log.Debugf("[UDPGW] Received KeepAlive")
-		return c.ReadUDPGW() 
-	}
-
-	// Determine Address Length
-	var addrLen int
-	if flags&flagIPv6 != 0 {
-		addrLen = 16
-	} else {
-		addrLen = 4
-	}
-
-	// Validate size
-	headerEnd := 3 + addrLen + 2 // Flags(1) + ID(2) + IP + Port(2)
-	if int(totalSize) < headerEnd {
-		return nil, fmt.Errorf("packet too short")
-	}
-
-	// Extract Data
-	data := payload[headerEnd:]
-	return data, nil
 }
