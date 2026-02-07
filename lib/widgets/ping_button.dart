@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PingButton extends StatefulWidget {
@@ -68,7 +69,7 @@ class _PingButtonState extends State<PingButton> with SingleTickerProviderStateM
     client.badCertificateCallback = (cert, host, port) => true;
 
     try {
-      // 1. Try HTTP Ping (Layer 7)
+      // 1. Try HTTP Ping (Layer 7 - Native)
       final request = await client.getUrl(Uri.parse(target));
       final response = await request.close();
       stopwatch.stop();
@@ -85,6 +86,12 @@ class _PingButtonState extends State<PingButton> with SingleTickerProviderStateM
         socket.destroy();
         return "TCP OK";
       } catch (_) {
+        // 3. Last Resort: Package HTTP (High Level)
+        try {
+           final response = await http.get(Uri.parse("http://1.1.1.1")).timeout(const Duration(seconds: 5));
+           if (response.statusCode == 200) return "HTTP OK";
+        } catch(_) {}
+        
         return "Timeout";
       }
     } finally {
@@ -100,6 +107,7 @@ class _PingButtonState extends State<PingButton> with SingleTickerProviderStateM
       if (ms < 300) return Colors.yellow;
     }
     if (res == "TCP OK") return Colors.cyanAccent;
+    if (res == "HTTP OK") return Colors.lightBlueAccent;
     return Colors.redAccent;
   }
 
