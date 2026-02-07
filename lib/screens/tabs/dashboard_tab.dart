@@ -1,14 +1,15 @@
+import 'package:flutter/foundation.dart'; // Import for ValueListenable
 import 'package:flutter/material.dart';
 import '../../widgets/ping_button.dart';
 
 class DashboardTab extends StatefulWidget {
   final String vpnState; // "disconnected", "connecting", "connected"
   final VoidCallback onToggle;
-  final String dl;
-  final String ul;
+  final ValueListenable<String> dl;
+  final ValueListenable<String> ul;
   final String duration;
-  final int sessionRx;
-  final int sessionTx;
+  final ValueListenable<int> sessionRx;
+  final ValueListenable<int> sessionTx;
 
   const DashboardTab({
     super.key,
@@ -138,43 +139,59 @@ class _DashboardTabState extends State<DashboardTab> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                Text(
-                  "Session: ${_formatTotalBytes(widget.sessionRx + widget.sessionTx)}",
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-                Container(width: 1, height: 12, color: Colors.white10),
-                Text(
-                  "Rx: ${_formatTotalBytes(widget.sessionRx)}",
-                  style: const TextStyle(color: Colors.greenAccent, fontSize: 12),
-                ),
-                Container(width: 1, height: 12, color: Colors.white10),
-                Text(
-                  "Tx: ${_formatTotalBytes(widget.sessionTx)}",
-                  style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
-                ),
-              ],
+            child: ValueListenableBuilder<int>(
+              valueListenable: widget.sessionRx,
+              builder: (context, rx, _) {
+                return ValueListenableBuilder<int>(
+                  valueListenable: widget.sessionTx,
+                  builder: (context, tx, _) {
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        Text(
+                          "Session: ${_formatTotalBytes(rx + tx)}",
+                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
+                        Container(width: 1, height: 12, color: Colors.white10),
+                        Text(
+                          "Rx: ${_formatTotalBytes(rx)}",
+                          style: const TextStyle(color: Colors.greenAccent, fontSize: 12),
+                        ),
+                        Container(width: 1, height: 12, color: Colors.white10),
+                        Text(
+                          "Tx: ${_formatTotalBytes(tx)}",
+                          style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                        ),
+                      ],
+                    );
+                  }
+                );
+              }
             ),
           ),
           Row(
             children: [
               Expanded(
-                child: StatCard(
-                  label: "Download",
-                  value: widget.dl,
-                  icon: Icons.download,
-                  color: Colors.green,
+                child: ValueListenableBuilder<String>(
+                  valueListenable: widget.dl,
+                  builder: (context, val, _) => StatCard(
+                    label: "Download",
+                    value: val,
+                    icon: Icons.download,
+                    color: Colors.green,
+                  ),
                 ),
               ),
               const SizedBox(width: 15),
               Expanded(
-                child: StatCard(
-                  label: "Upload",
-                  value: widget.ul,
-                  icon: Icons.upload,
-                  color: Colors.orange,
+                child: ValueListenableBuilder<String>(
+                  valueListenable: widget.ul,
+                  builder: (context, val, _) => StatCard(
+                    label: "Upload",
+                    value: val,
+                    icon: Icons.upload,
+                    color: Colors.orange,
+                  ),
                 ),
               ),
             ],
