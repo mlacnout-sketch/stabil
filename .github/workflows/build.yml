@@ -2,7 +2,7 @@ name: ZIVPN Production Build
 
 on:
   push:
-    branches: [ "main", "feat/tun2socks-integration" ]
+    branches: [ "main", "feat/tun2socks-integration", "refactor/ui-cleanup", "update-repo" ]
   workflow_dispatch:
 
 jobs:
@@ -86,3 +86,41 @@ jobs:
         with:
           name: ZIVPN-Turbo-Release
           path: build/app/outputs/flutter-apk/app-release.apk
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/update-repo'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ZIVPN-Turbo-Release
+
+      - name: Create Release Tag
+        id: tag_version
+        run: |
+          VERSION=$(grep 'version:' pubspec.yaml | head -n 1 | awk '{print $2}' | cut -d '+' -f 1)
+          if [ -z "$VERSION" ]; then VERSION="1.0.0"; fi
+          TAG="v$VERSION-b${{ github.run_number }}"
+          echo "VERSION=$TAG" >> $GITHUB_ENV
+          echo "Generated version: $TAG"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: Release ${{ env.VERSION }}
+          body: |
+            Automatic build from update-repo branch.
+            Run ID: ${{ github.run_id }}
+          files: app-release.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
