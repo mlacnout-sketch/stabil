@@ -232,6 +232,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _toggleVpn() async {
     HapticFeedback.mediumImpact();
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload(); // Force reload to get latest settings from other tabs
 
     if (_vpnState == "connected") {
       try {
