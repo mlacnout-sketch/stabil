@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
-import 'dart:collection';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:open_filex/open_filex.dart';
@@ -29,7 +28,7 @@ class _HomePageState extends State<HomePage> {
   static const statsChannel = EventChannel('com.minizivpn.app/stats');
 
   String _vpnState = "disconnected"; // disconnected, connecting, connected
-  final ListQueue<String> _logs = ListQueue<String>();
+  final List<String> _logs = [];
   final ScrollController _logScrollCtrl = ScrollController();
   
   List<Map<String, dynamic>> _accounts = [];
@@ -196,7 +195,7 @@ class _HomePageState extends State<HomePage> {
       if (event is String && mounted) {
         setState(() {
           _logs.add(event);
-          if (_logs.length > 1000) _logs.removeFirst();
+          if (_logs.length > 1000) _logs.removeAt(0);
         });
         if (_selectedIndex == 2 && _logScrollCtrl.hasClients) {
           _logScrollCtrl.jumpTo(_logScrollCtrl.position.maxScrollExtent);
