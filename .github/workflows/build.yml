@@ -38,21 +38,14 @@ jobs:
       - name: Install NDK
         run: sdkmanager "ndk;27.0.12077973"
 
-      - name: Install Gomobile
-        run: |
-          go install golang.org/x/mobile/cmd/gomobile@latest
-          go install golang.org/x/mobile/cmd/gobind@latest
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-
       - name: Build Native Tunnel (tun2socks AAR)
         working-directory: native/tun2socks
         run: |
           go mod download
-          go get golang.org/x/mobile/bind
           mkdir -p ../../android/app/libs
           export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973
           # Explicitly target only arm64 to save build time and size
-          gomobile bind -v -target=android/arm64 -androidapi 24 -o ../../android/app/libs/tun2socks.aar ./mobile
+          go run golang.org/x/mobile/cmd/gomobile bind -v -target=android/arm64 -androidapi 24 -o ../../android/app/libs/tun2socks.aar ./mobile
 
       - name: Clean & Get Dependencies
         run: |
