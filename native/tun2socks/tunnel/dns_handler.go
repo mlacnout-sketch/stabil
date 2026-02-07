@@ -63,32 +63,50 @@ func (t *Tunnel) handleDNS(uc adapter.UDPConn) {
 }
 
 func (t *Tunnel) resolveDNSTCP(query *dns.Msg) (*dns.Msg, error) {
-	// Level Dewa: We MUST use the internal dialer to go THROUGH the proxy.
-	// 1.1.1.1:53 (Cloudflare) is often more reliable over proxy than Google.
-	conn, err := dialer.DefaultDialer.DialContext(context.Background(), "tcp", "1.1.1.1:53")
-	if err != nil {
-		return nil, fmt.Errorf("proxy dial failed: %w", err)
-	}
-	defer conn.Close()
-
-	// Set short timeout for DNS over TCP
-	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
-
-	dnsConn := &dns.Conn{Conn: conn}
-	if err := dnsConn.WriteMsg(query); err != nil {
-		return nil, fmt.Errorf("write msg failed: %w", err)
+	// List of reliable upstream DNS servers (TCP)
+	// We iterate through them until one succeeds.
+	resolvers := []string{
+		"1.1.1.1:53", // Cloudflare
+		"8.8.8.8:53", // Google
+		"9.9.9.9:53", // Quad9
+		"112.215.198.248:53", // ISP Specific (XL/Tsel)
 	}
 
-	resp, err := dnsConn.ReadMsg()
-	if err != nil {
-		return nil, fmt.Errorf("read msg failed: %w", err)
+	var lastErr error
+	for _, resolver := range resolvers {
+		conn, err := dialer.DefaultDialer.DialContext(context.Background(), "tcp", resolver)
+		if err != nil {
+			lastErr = err
+			log.Warnf("[DNS] Failed to dial %s: %v", resolver, err)
+			continue
+		}
+		
+		// Set short timeout per attempt
+		_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+
+		dnsConn := &dns.Conn{Conn: conn}
+		if err := dnsConn.WriteMsg(query); err != nil {
+			dnsConn.Close()
+			lastErr = err
+			continue
+		}
+
+		resp, err := dnsConn.ReadMsg()
+		dnsConn.Close() // Close immediately after read
+		
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		if resp == nil {
+			continue
+		}
+
+		// Success! Match ID and return.
+		resp.Id = query.Id
+		return resp, nil
 	}
 
-	if resp == nil {
-		return nil, fmt.Errorf("empty dns response")
-	}
-
-	// Match ID to ensure security
-	resp.Id = query.Id
-	return resp, nil
+	return nil, fmt.Errorf("all resolvers failed, last error: %v", lastErr)
 }
