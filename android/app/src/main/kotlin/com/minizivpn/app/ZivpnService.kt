@@ -123,10 +123,17 @@ class ZivpnService : VpnService() {
         builder.setMtu(mtu)
         
         // GLOBAL ROUTING: Catch EVERYTHING
+        // We use a custom route calculation to exclude the server IP to prevent loops,
+        // instead of disallowing the entire application.
         try {
-            builder.addRoute("0.0.0.0", 0)
             // Handle Fake-IP range (198.18.0.0/15) to prevent "host unreachable" errors
             builder.addRoute("198.18.0.0", 15)
+
+            if (ip.isNotEmpty()) {
+                addRoutesExcludingIp(builder, ip)
+            } else {
+                builder.addRoute("0.0.0.0", 0)
+            }
         } catch (e: Exception) {
             Log.e("ZIVPN-Tun", "Failed to add global route, falling back to subnets")
             // Fallback to stable subnets if 0.0.0.0/0 is rejected by system
@@ -153,9 +160,7 @@ class ZivpnService : VpnService() {
             try { builder.addRoute(dns, 32) } catch (e: Exception) {}
         }
 
-        try {
-            builder.addDisallowedApplication(packageName)
-        } catch (e: Exception) {}
+        // REMOVED: builder.addDisallowedApplication(packageName) to allow app traffic (updates) through VPN
 
         builder.addDnsServer("1.1.1.1")
         builder.addDnsServer("8.8.8.8")
@@ -300,5 +305,51 @@ class ZivpnService : VpnService() {
     override fun onDestroy() {
         disconnect()
         super.onDestroy()
+    }
+
+    private fun addRoutesExcludingIp(builder: Builder, ipToExclude: String) {
+        try {
+            val address = InetAddress.getByName(ipToExclude)
+            val bytes = address.address
+            // Only handle IPv4 for now
+            if (bytes.size != 4) {
+                 builder.addRoute("0.0.0.0", 0)
+                 return
+            }
+
+            // Convert target IP to int
+            var target = 0
+            for (b in bytes) {
+                target = (target shl 8) or (b.toInt() and 0xFF)
+            }
+
+            var currentIp = 0
+            for (i in 0 until 32) {
+                // i is current prefix length being added (actually i+1)
+                // We are looking at bit at index 31-i.
+                val bit = (target ushr (31 - i)) and 1
+
+                if (bit == 0) {
+                    // Target is in lower half (0). Add upper half (1).
+                    // Upper half starts at currentIp with bit i set to 1.
+                    val routeIp = currentIp or (1 shl (31 - i))
+                    builder.addRoute(intToIpString(routeIp), i + 1)
+                    // currentIp remains with bit 0
+                } else {
+                    // Target is in upper half (1). Add lower half (0).
+                    // Lower half starts at currentIp with bit i set to 0.
+                    builder.addRoute(intToIpString(currentIp), i + 1)
+                    // Proceed to upper half
+                    currentIp = currentIp or (1 shl (31 - i))
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ZIVPN-Tun", "Error calculating routes excluding IP: ${e.message}")
+            builder.addRoute("0.0.0.0", 0)
+        }
+    }
+
+    private fun intToIpString(ip: Int): String {
+        return "${(ip ushr 24) and 0xFF}.${(ip ushr 16) and 0xFF}.${(ip ushr 8) and 0xFF}.${ip and 0xFF}"
     }
 }

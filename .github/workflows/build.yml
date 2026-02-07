@@ -47,10 +47,8 @@ jobs:
       - name: Build Native Tunnel (tun2socks AAR)
         working-directory: native/tun2socks
         run: |
-          go get golang.org/x/mobile/bind
           mkdir -p ../../android/app/libs
           export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973
-          gomobile init
           # Explicitly target only arm64 to save build time and size
           gomobile bind -v -target=android/arm64 -androidapi 24 -o ../../android/app/libs/tun2socks.aar ./mobile
 
