@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -64,7 +65,7 @@ func (t *Tunnel) handleDNS(uc adapter.UDPConn) {
 func (t *Tunnel) resolveDNSTCP(query *dns.Msg) (*dns.Msg, error) {
 	// Level Dewa: We MUST use the internal dialer to go THROUGH the proxy.
 	// 8.8.8.8:53 is chosen as a reliable global upstream.
-	conn, err := dialer.DefaultDialer.Dial("tcp", "8.8.8.8:53")
+	conn, err := dialer.DefaultDialer.DialContext(context.Background(), "tcp", "8.8.8.8:53")
 	if err != nil {
 		return nil, fmt.Errorf("proxy dial failed: %w", err)
 	}
