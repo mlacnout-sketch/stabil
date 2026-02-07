@@ -35,8 +35,18 @@ func (t *Tunnel) handleUDPConn(uc adapter.UDPConn) {
 	}
 
 	// BadVPN/UDPGW Support
-	if t.udpgwRemote != "" {
-		t.handleBadVPN(uc, metadata)
+	t.udpgwMu.Lock()
+	mgr := t.udpgwMgr
+	t.udpgwMu.Unlock()
+
+	if mgr != nil {
+		client, err := mgr.NewClient()
+		if err != nil {
+			log.Warnf("[UDPGW] Failed to create client: %v", err)
+			return
+		}
+		
+		t.handleBadVPN(uc, metadata, client)
 		return
 	}
 
@@ -85,7 +95,7 @@ func copyPacketData(dst, src net.PacketConn, to net.Addr, timeout time.Duration)
 
 	for {
 		src.SetReadDeadline(time.Now().Add(timeout))
-		n, _, err := src.ReadFrom(buf)
+		n, addr, err := src.ReadFrom(buf)
 		if ne, ok := err.(net.Error); ok && ne.Timeout() {
 			return nil /* ignore I/O timeout */
 		} else if err == io.EOF {
@@ -94,7 +104,12 @@ func copyPacketData(dst, src net.PacketConn, to net.Addr, timeout time.Duration)
 			return err
 		}
 
-		if _, err = dst.WriteTo(buf[:n], to); err != nil {
+		target := to
+		if target == nil {
+			target = addr
+		}
+
+		if _, err = dst.WriteTo(buf[:n], target); err != nil {
 			return err
 		}
 		dst.SetReadDeadline(time.Now().Add(timeout))
@@ -128,23 +143,11 @@ func (pc *symmetricNATPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 	}
 }
 
-func (t *Tunnel) handleBadVPN(uc adapter.UDPConn, metadata *M.Metadata) {
-	if t.udpgwManager == nil {
-		log.Warnf("[UDPGW] Manager not initialized")
-		return
-	}
-
-	client, err := t.udpgwManager.NewClient()
-	if err != nil {
-		log.Warnf("[UDPGW] Failed to create client: %v", err)
-		return
-	}
+func (t *Tunnel) handleBadVPN(uc adapter.UDPConn, metadata *M.Metadata, client *badvpn.Client) {
 	defer client.Close()
 
 	log.Infof("[UDPGW] Tunneling %s <-> %s", metadata.SourceAddress(), metadata.DestinationAddress())
 
-	// Prepare remote address
-	// metadata.DstIP is netip.Addr, convert to net.IP slice
 	dstIP := net.IP(metadata.DstIP.AsSlice())
 	dstPort := metadata.DstPort
 
@@ -157,7 +160,7 @@ func (t *Tunnel) handleBadVPN(uc adapter.UDPConn, metadata *M.Metadata) {
 			uc.SetReadDeadline(time.Now().Add(t.udpTimeout.Load()))
 			n, _, err := uc.ReadFrom(buf)
 			if err != nil {
-				client.Close()
+				client.Close() // Force read loop to exit
 				return
 			}
 			
@@ -174,9 +177,6 @@ func (t *Tunnel) handleBadVPN(uc adapter.UDPConn, metadata *M.Metadata) {
 			break
 		}
 		
-		// Write packet.Data back to UC
-		// packet.Addr is the source addr, but UC.WriteTo expects packet data
-		// Tun2socks handles NAT mapping based on flow.
 		_, _ = uc.WriteTo(packet.Data, nil)
 	}
 }
