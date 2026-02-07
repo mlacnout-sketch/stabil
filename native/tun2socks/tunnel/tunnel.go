@@ -9,7 +9,6 @@ import (
 
 	"github.com/xjasonlyu/tun2socks/v2/badvpn"
 	"github.com/xjasonlyu/tun2socks/v2/core/adapter"
-	"github.com/xjasonlyu/tun2socks/v2/log"
 	"github.com/xjasonlyu/tun2socks/v2/proxy"
 	"github.com/xjasonlyu/tun2socks/v2/tunnel/statistic"
 )
@@ -132,6 +131,5 @@ func (t *Tunnel) SetUDPGWRemote(addr string) {
 	}
 	if addr != "" {
 		t.udpgwMgr = badvpn.NewManager(addr)
-		t.udpgwMgr.Start()
 	}
 }

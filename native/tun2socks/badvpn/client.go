@@ -87,6 +87,12 @@ func NewManager(serverAddr string) *Manager {
 	return m
 }
 
+func (m *Manager) StartClient() error {
+	// Already started in NewManager but keeping method for explicit control if needed
+	// For now, it's just a placeholder or can be used to restart logic if refactored
+	return nil
+}
+
 func (m *Manager) Close() {
 	m.cancel()
 	m.mu.Lock()
