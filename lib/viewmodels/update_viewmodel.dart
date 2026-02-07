@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:rxdart/rxdart.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/app_version.dart';
 import '../repositories/update_repository.dart';
 
