@@ -149,7 +149,7 @@ class ZivpnService : VpnService() {
         val logLevel = prefs.getString("log_level", "info") ?: "info"
         val coreCount = prefs.getInt("core_count", 4)
         val enableBadVPN = prefs.getBoolean("enable_badvpn", false)
-        val udpgwAddr = if (enableBadVPN) "127.0.0.1:7300" else ""
+        val udpgwAddr = if (enableBadVPN) "$ip:7300" else ""
 
         // 1. START HYSTERIA & LOAD BALANCER
         try {
