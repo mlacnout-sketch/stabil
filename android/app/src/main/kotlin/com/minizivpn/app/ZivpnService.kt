@@ -196,7 +196,18 @@ class ZivpnService : VpnService() {
 
             Log.i("ZIVPN-Tun", "VPN Interface established. FD: $fd")
 
-            // 3. Start BadVPN Tun2Socks (C Binary)
+            /**
+             * BadVPN Tun2Socks Parameter Explanation:
+             * --netif-ipaddr: Virtual IP address for the VPN interface (169.254.1.2).
+             * --netif-netmask: Netmask for the virtual interface.
+             * --socks-server-addr: Local SOCKS5 proxy server address (Port 7777, Load Balancer).
+             * --tunmtu: Maximum Transmission Unit size (usually 1500).
+             * --tunfd: File Descriptor of the TUN interface created by Android VpnService.
+             * --sock: Path to the control socket file (used for status/control).
+             * --loglevel: Log verbosity level (3 = info).
+             * --udpgw-remote-server-addr: BadVPN UDP Gateway server address (127.0.0.1:7300).
+             * --dnsgw: DNS gateway address (169.254.1.1:8091, served by pdnsd).
+             */
             val libDir = applicationInfo.nativeLibraryDir
             val libTun = File(libDir, "libtun2socks.so").absolutePath
             val sockPath = File(filesDir, "sock_path").absolutePath
