@@ -333,15 +333,6 @@ class _HomePageState extends State<HomePage> {
 
       setState(() => _vpnState = "connecting");
 
-      final bool useWakelock = prefs.getBool('cpu_wakelock') ?? false;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Connecting... (Wakelock: $useWakelock)"),
-          duration: const Duration(seconds: 1),
-          backgroundColor: AppColors.primary,
-        ),
-      );
-
       try {
         await platform.invokeMethod('startCore', {
           "ip": ip,

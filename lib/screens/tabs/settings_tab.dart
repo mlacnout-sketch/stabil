@@ -90,7 +90,7 @@ class _SettingsTabState extends State<SettingsTab> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _mtuCtrl.text = prefs.getString('mtu') ?? "1200";
+      _mtuCtrl.text = prefs.getString('mtu') ?? "1500";
       _pingTargetCtrl.text = prefs.getString('ping_target') ?? "http://www.gstatic.com/generate_204";
       _autoTuning = prefs.getBool('auto_tuning') ?? true;
       _cpuWakelock = prefs.getBool('cpu_wakelock') ?? false;

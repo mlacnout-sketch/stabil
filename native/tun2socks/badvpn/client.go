@@ -20,8 +20,8 @@ var (
 	// Can be modified for testing.
 	LocalSocksAddr = "127.0.0.1:7777"
 	
-	// KeepAliveInterval default 10s
-	KeepAliveInterval = 10 * time.Second
+	// KeepAliveInterval default 5s
+	KeepAliveInterval = 5 * time.Second
 )
 
 const (
