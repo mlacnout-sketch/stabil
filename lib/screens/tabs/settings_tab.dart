@@ -27,6 +27,7 @@ class _SettingsTabState extends State<SettingsTab> {
 
   bool _autoTuning = true;
   bool _cpuWakelock = false;
+  bool _enableBadVPN = false;
   String _bufferSize = "4m";
   String _logLevel = "info";
   double _coreCount = 4.0;
@@ -93,6 +94,7 @@ class _SettingsTabState extends State<SettingsTab> {
       _pingTargetCtrl.text = prefs.getString('ping_target') ?? "http://www.gstatic.com/generate_204";
       _autoTuning = prefs.getBool('auto_tuning') ?? true;
       _cpuWakelock = prefs.getBool('cpu_wakelock') ?? false;
+      _enableBadVPN = prefs.getBool('enable_badvpn') ?? false;
       _bufferSize = prefs.getString('buffer_size') ?? "4m";
       _logLevel = prefs.getString('log_level') ?? "info";
       _coreCount = (prefs.getInt('core_count') ?? 4).toDouble();
@@ -105,6 +107,7 @@ class _SettingsTabState extends State<SettingsTab> {
     await prefs.setString('ping_target', _pingTargetCtrl.text);
     await prefs.setBool('auto_tuning', _autoTuning);
     await prefs.setBool('cpu_wakelock', _cpuWakelock);
+    await prefs.setBool('enable_badvpn', _enableBadVPN);
     await prefs.setString('buffer_size', _bufferSize);
     await prefs.setString('log_level', _logLevel);
     await prefs.setInt('core_count', _coreCount.toInt());
@@ -150,6 +153,12 @@ class _SettingsTabState extends State<SettingsTab> {
                   subtitle: const Text("Prevent CPU sleep (High Battery Usage)"),
                   value: _cpuWakelock,
                   onChanged: (val) => setState(() => _cpuWakelock = val),
+                ),
+                SwitchListTile(
+                  title: const Text("BadVPN UDPGW"),
+                  subtitle: const Text("Use UDPGW over TCP (Legacy Mode)"),
+                  value: _enableBadVPN,
+                  onChanged: (val) => setState(() => _enableBadVPN = val),
                 ),
                 SwitchListTile(
                   title: const Text("TCP Auto Tuning"),

@@ -10,6 +10,7 @@ import (
 	"github.com/xjasonlyu/tun2socks/v2/core/adapter"
 	"github.com/xjasonlyu/tun2socks/v2/proxy"
 	"github.com/xjasonlyu/tun2socks/v2/tunnel/statistic"
+	"github.com/xjasonlyu/tun2socks/v2/badvpn"
 )
 
 const (
@@ -40,6 +41,10 @@ type Tunnel struct {
 
 	procOnce   sync.Once
 	procCancel context.CancelFunc
+
+	// BadVPN
+	badvpnClient *badvpn.Client
+	badvpnMu     sync.RWMutex
 }
 
 func New(proxy proxy.Proxy, manager *statistic.Manager) *Tunnel {
@@ -79,6 +84,13 @@ func (t *Tunnel) process(ctx context.Context) {
 		case conn := <-t.udpQueue:
 			go t.handleUDPConn(conn)
 		case <-ctx.Done():
+			// Close BadVPN client if active
+			t.badvpnMu.Lock()
+			if t.badvpnClient != nil {
+				// t.badvpnClient.Close() // Not implemented yet
+				t.badvpnClient = nil
+			}
+			t.badvpnMu.Unlock()
 			return
 		}
 	}
@@ -113,4 +125,21 @@ func (t *Tunnel) SetProxy(proxy proxy.Proxy) {
 
 func (t *Tunnel) SetUDPTimeout(timeout time.Duration) {
 	t.udpTimeout.Store(timeout)
+}
+
+func (t *Tunnel) SetBadVPN(enabled bool) {
+	t.badvpnMu.Lock()
+	defer t.badvpnMu.Unlock()
+
+	if enabled {
+		if t.badvpnClient == nil {
+			// Initialize BadVPN Client pointing to 127.0.0.1:7300 (via SOCKS5)
+			t.badvpnClient = badvpn.NewClient(t.Proxy(), "127.0.0.1:7300")
+		}
+	} else {
+		if t.badvpnClient != nil {
+			// t.badvpnClient.Close()
+			t.badvpnClient = nil
+		}
+	}
 }

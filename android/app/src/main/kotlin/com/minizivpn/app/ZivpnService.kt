@@ -152,6 +152,7 @@ class ZivpnService : VpnService() {
         val logLevel = prefs.getString("log_level", "info") ?: "info"
         val coreCount = prefs.getInt("core_count", 4)
         val useWakelock = prefs.getBoolean("cpu_wakelock", false)
+        val enableBadVPN = prefs.getBoolean("enable_badvpn", false)
 
         if (useWakelock) {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -240,7 +241,8 @@ class ZivpnService : VpnService() {
                         udpTimeout,
                         bufferSize, 
                         bufferSize, 
-                        autoTuning
+                        autoTuning,
+                        enableBadVPN
                     )
                     logToApp("Tun2Socks Engine Started successfully.")
                 } catch (e: Exception) {

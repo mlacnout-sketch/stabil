@@ -133,6 +133,7 @@ class MainActivity: FlutterActivity() {
                 val logLevel = call.argument<String>("log_level") ?: "info"
                 val coreCount = call.argument<Int>("core_count") ?: 4
                 val cpuWakelock = call.argument<Boolean>("cpu_wakelock") ?: false
+                val enableBadVPN = call.argument<Boolean>("enable_badvpn") ?: false
 
                 // Save Config for ZivpnService
                 getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
@@ -149,6 +150,7 @@ class MainActivity: FlutterActivity() {
                     .putString("log_level", logLevel)
                     .putInt("core_count", coreCount)
                     .putBoolean("cpu_wakelock", cpuWakelock)
+                    .putBoolean("enable_badvpn", enableBadVPN)
                     .apply()
 
                 sendToLog("Config saved. Ready to start VPN.")

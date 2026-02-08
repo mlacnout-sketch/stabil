@@ -214,6 +214,7 @@ func netstack(k *Key) (err error) {
 		return err
 	}
 	tunnel.T().SetProxy(_defaultProxy)
+	tunnel.T().SetBadVPN(k.EnableBadVPN)
 
 	if _defaultDevice, err = parseDevice(k.Device, uint32(k.MTU)); err != nil {
 		return err

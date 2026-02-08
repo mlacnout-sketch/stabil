@@ -3,305 +3,386 @@ package badvpn
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"sync"
 	"time"
 
-	"github.com/xjasonlyu/tun2socks/v2/dialer"
 	"github.com/xjasonlyu/tun2socks/v2/log"
+	"github.com/xjasonlyu/tun2socks/v2/proxy"
 )
 
 const (
-	flagKeepAlive = 0x01
-	flagIPv6      = 0x08
-	headerSize    = 3 // Flags(1) + ConnID(2)
+	FlagKeepAlive = 0x01
+	FlagIPv6      = 0x08
 )
 
-// Packet represents a UDP packet received from UDPGW
+// Packet represents a received UDP packet
 type Packet struct {
-	Addr net.Addr
-	Data []byte
+	DstIP   netip.Addr
+	DstPort uint16
+	Data    []byte
 }
 
-// Client handles a single UDPGW session over a shared TCP connection.
+// Client manages the UDPGW session
 type Client struct {
-	connID  uint16
-	manager *Manager
-	packets chan *Packet
-	closed  bool
-	mu      sync.Mutex
+	proxy       proxy.Proxy
+	serverAddr  string
+	conn        net.Conn
+	mu          sync.Mutex
+	conns       map[uint16]chan *Packet // Map ConnID -> Channel
+	nextID      uint16
+	ctx         context.Context
+	cancel      context.CancelFunc
+	reconnectCh chan struct{}
 }
 
-func (c *Client) WriteUDPGW(dstIP net.IP, dstPort uint16, data []byte) error {
-	return c.manager.writePacket(c.connID, dstIP, dstPort, data)
-}
-
-func (c *Client) ReadUDPGW() (*Packet, error) {
-	p, ok := <-c.packets
-	if !ok {
-		return nil, io.EOF
+func NewClient(p proxy.Proxy, serverAddr string) *Client {
+	ctx, cancel := context.WithCancel(context.Background())
+	c := &Client{
+		proxy:       p,
+		serverAddr:  serverAddr,
+		conns:       make(map[uint16]chan *Packet),
+		nextID:      1,
+		ctx:         ctx,
+		cancel:      cancel,
+		reconnectCh: make(chan struct{}, 1),
 	}
-	return p, nil
+	go c.loop()
+	return c
 }
 
-func (c *Client) Close() error {
+// Register registers a new flow and returns a ConnID and a packet channel
+func (c *Client) Register() (uint16, <-chan *Packet) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.closed {
-		return nil
-	}
-	c.closed = true
-	c.manager.removeClient(c.connID)
-	// Don't close channel here immediately to avoid panic on send?
-	// Better let manager handle it or ensure synchronization.
-	// For simplicity in this logic:
-	// close(c.packets) // Removed to prevent race
-	return nil
-}
 
-// Manager manages a single TCP connection to the UDPGW server and multiplexes multiple clients.
-type Manager struct {
-	serverAddr string
-	conn       net.Conn
-	clients    map[uint16]*Client
-	nextID     uint16
-	mu         sync.Mutex
-	ctx        context.Context
-	cancel     context.CancelFunc
-}
-
-func NewManager(serverAddr string) *Manager {
-	ctx, cancel := context.WithCancel(context.Background())
-	m := &Manager{
-		serverAddr: serverAddr,
-		clients:    make(map[uint16]*Client),
-		nextID:     1,
-		ctx:        ctx,
-		cancel:     cancel,
-	}
-	// Start background loops
-	go m.mainLoop()
-	go m.keepAliveLoop()
-	return m
-}
-
-func (m *Manager) StartClient() error {
-	// Already started in NewManager but keeping method for explicit control if needed
-	// For now, it's just a placeholder or can be used to restart logic if refactored
-	return nil
-}
-
-func (m *Manager) Close() {
-	m.cancel()
-	m.mu.Lock()
-	if m.conn != nil {
-		m.conn.Close()
-		m.conn = nil
-	}
-	m.mu.Unlock()
-}
-
-func (m *Manager) NewClient() (*Client, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	id := m.nextID
-	m.nextID++
-	if m.nextID == 0 {
-		m.nextID = 1
+	id := c.nextID
+	c.nextID++
+	if c.nextID == 0 {
+		c.nextID = 1 // Skip 0
 	}
 
-	// Ensure ID uniqueness/collision handling if needed
-	// For now assume simple wrap around is fine for low concurrency
-
-	client := &Client{
-		connID:  id,
-		manager: m,
-		packets: make(chan *Packet, 100),
-	}
-	m.clients[id] = client
-	return client, nil
-}
-
-func (m *Manager) removeClient(id uint16) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.clients, id)
-}
-
-func (m *Manager) mainLoop() {
+	// Simple collision avoidance (loop until free)
 	for {
-		select {
-		case <-m.ctx.Done():
-			return
-		default:
+		if _, exists := c.conns[id]; !exists {
+			break
 		}
-
-		conn, err := dialer.DefaultDialer.DialContext(m.ctx, "tcp", m.serverAddr)
-		if err != nil {
-			log.Warnf("[UDPGW] Failed to connect to %s: %v, retrying in 5s...", m.serverAddr, err)
-			select {
-			case <-m.ctx.Done():
-				return
-			case <-time.After(5 * time.Second):
-				continue
-			}
+		id++
+		if id == 0 {
+			id = 1
 		}
+	}
 
-		m.mu.Lock()
-		m.conn = conn
-		m.mu.Unlock()
+	ch := make(chan *Packet, 64)
+	c.conns[id] = ch
+	return id, ch
+}
 
-		log.Infof("[UDPGW] Connected to %s", m.serverAddr)
-
-		// Run readLoop synchronously. It returns when connection breaks.
-		m.readLoop()
-
-		m.mu.Lock()
-		if m.conn != nil {
-			m.conn.Close()
-			m.conn = nil
-		}
-		m.mu.Unlock()
-
-		log.Warnf("[UDPGW] Connection lost, reconnecting...")
-		time.Sleep(1 * time.Second)
+// Unregister removes a flow
+func (c *Client) Unregister(id uint16) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if ch, ok := c.conns[id]; ok {
+		close(ch)
+		delete(c.conns, id)
 	}
 }
 
-func (m *Manager) writePacket(connID uint16, dstIP net.IP, dstPort uint16, data []byte) error {
-	m.mu.Lock()
-	conn := m.conn
-	m.mu.Unlock()
+// WritePacket sends a packet to the UDPGW server
+func (c *Client) WritePacket(connID uint16, dest netip.Addr, port uint16, data []byte) error {
+	c.mu.Lock()
+	conn := c.conn
+	c.mu.Unlock()
 
 	if conn == nil {
-		return fmt.Errorf("not connected")
+		return errors.New("not connected")
 	}
 
-	isIPv6 := dstIP.To4() == nil
-	var addrLen int
+	isIPv6 := dest.Is6()
+	addrLen := 4
 	if isIPv6 {
 		addrLen = 16
-	} else {
-		addrLen = 4
 	}
 
-	packetSize := headerSize + addrLen + 2 + len(data)
-	buf := make([]byte, 2+packetSize)
+	// Header: 2 bytes Len
+	// Payload: 1 Flags + 2 ID + Addr + 2 Port + Data
+	payloadLen := 1 + 2 + addrLen + 2 + len(data)
+	buf := make([]byte, 2+payloadLen)
 
-	// Size
-	binary.LittleEndian.PutUint16(buf[0:2], uint16(packetSize))
+	// Length (Little Endian)
+	binary.LittleEndian.PutUint16(buf[0:2], uint16(payloadLen))
 
 	// Flags
-	var flags uint8
 	if isIPv6 {
-		flags |= flagIPv6
+		buf[2] = FlagIPv6
+	} else {
+		buf[2] = 0x00
 	}
-	buf[2] = flags
 
-	// ConnID
+	// ConnID (Little Endian)
 	binary.LittleEndian.PutUint16(buf[3:5], connID)
 
-	// Address & Data
+	// Address
 	if isIPv6 {
-		copy(buf[5:21], dstIP.To16())
-		binary.BigEndian.PutUint16(buf[21:23], dstPort)
+		copy(buf[5:21], dest.AsSlice())
+		// Port (Big Endian)
+		binary.BigEndian.PutUint16(buf[21:23], port)
 		copy(buf[23:], data)
 	} else {
-		copy(buf[5:9], dstIP.To4())
-		binary.BigEndian.PutUint16(buf[9:11], dstPort)
+		copy(buf[5:9], dest.AsSlice())
+		// Port (Big Endian)
+		binary.BigEndian.PutUint16(buf[9:11], port)
 		copy(buf[11:], data)
 	}
 
+	// Write atomically? No, net.Conn is thread-safe but writing multiple chunks might interleave.
+	// We constructed a single buffer, so single Write call is atomic enough.
+	conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	_, err := conn.Write(buf)
 	return err
 }
 
-func (m *Manager) readLoop() {
+func (c *Client) loop() {
+	backoff := time.Second
+
 	for {
 		select {
-		case <-m.ctx.Done():
+		case <-c.ctx.Done():
 			return
 		default:
 		}
 
-		// Read Size
-		sizeBuf := make([]byte, 2)
-		if _, err := io.ReadFull(m.conn, sizeBuf); err != nil {
-			return
-		}
-		totalSize := binary.LittleEndian.Uint16(sizeBuf)
-
-		// Read Payload
-		payload := make([]byte, totalSize)
-		if _, err := io.ReadFull(m.conn, payload); err != nil {
-			return
-		}
-
-		flags := payload[0]
-		connID := binary.LittleEndian.Uint16(payload[1:3])
-
-		if flags&flagKeepAlive != 0 {
-			continue
-		}
-
-		var addrLen int
-		if flags&flagIPv6 != 0 {
-			addrLen = 16
-		} else {
-			addrLen = 4
-		}
-
-		headerEnd := 3 + addrLen + 2
-		if int(totalSize) < headerEnd {
-			continue
-		}
-
-		ip := make(net.IP, addrLen)
-		copy(ip, payload[3:3+addrLen])
-		port := binary.BigEndian.Uint16(payload[3+addrLen : 3+addrLen+2])
-		data := payload[headerEnd:]
-
-		m.mu.Lock()
-		client, ok := m.clients[connID]
-		m.mu.Unlock()
-
-		if ok {
+		err := c.connect()
+		if err != nil {
+			log.Warnf("[UDPGW] Connect failed: %v. Retrying in %v", err, backoff)
 			select {
-			case client.packets <- &Packet{
-				Addr: &net.UDPAddr{IP: ip, Port: int(port)},
-				Data: data,
-			}:
-			default:
-				// Buffer full, drop
+			case <-c.ctx.Done():
+				return
+			case <-time.After(backoff):
+				if backoff < 10*time.Second {
+					backoff *= 2
+				}
+				continue
 			}
 		}
+
+		backoff = time.Second // Reset backoff
+		log.Infof("[UDPGW] Connected to %s", c.serverAddr)
+
+		// Start KeepAlive
+		go c.keepAlive()
+
+		// Read Loop
+		c.readLoop()
+
+		// Disconnected
+		log.Warnf("[UDPGW] Disconnected")
+		c.mu.Lock()
+		if c.conn != nil {
+			c.conn.Close()
+			c.conn = nil
+		}
+		c.mu.Unlock()
 	}
 }
 
-func (m *Manager) keepAliveLoop() {
+func (c *Client) connect() error {
+	// Parse address
+	host, portStr, err := net.SplitHostPort(c.serverAddr)
+	if err != nil {
+		return err
+	}
+	port, _ := net.LookupPort("tcp", portStr)
+
+	// Dial via Proxy (SOCKS5 -> Hysteria -> 127.0.0.1:7300)
+	// We use Metadata to describe the target
+	// wait... Proxy.Dial usually takes Metadata or Address string?
+	// The interface is Proxy.Dial(metadata *Metadata) (net.Conn, error)
+
+	// But wait, Proxy.Dial expects us to route *TO* the proxy, or *THROUGH* the proxy?
+	// We want to connect THROUGH the proxy TO 127.0.0.1:7300 (on the server side).
+	
+	// BUT, `c.proxy` is usually the SOCKS5 handler which routes packet based on metadata.
+	// If we use SOCKS5, the metadata destination IS 127.0.0.1:7300.
+	
+	// We need to construct metadata. But we don't have metadata package here yet.
+	// Let's assume we can just use net.Dial to the LOCAL SOCKS5 port (e.g. 7777)
+	// and ask it to CONNECT to 7300.
+	// This is cleaner than using internal Proxy interface which might be complex.
+	
+	// However, we are INSIDE tun2socks process. We can use the Proxy interface directly.
+	
+	// Let's assume we connect to local SOCKS5 (7777) via TCP.
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:7777", 5*time.Second)
+	if err != nil {
+		return err
+	}
+
+	// Perform SOCKS5 Handshake to 127.0.0.1:7300
+	// 1. Auth (No Auth)
+	conn.Write([]byte{0x05, 0x01, 0x00})
+	buf := make([]byte, 2)
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		conn.Close()
+		return err
+	}
+	if buf[0] != 0x05 || buf[1] != 0x00 {
+		conn.Close()
+		return errors.New("SOCKS5 handshake failed")
+	}
+
+	// 2. Connect
+	// CMD=0x01 (CONNECT), ATYP=0x01 (IPv4)
+	req := []byte{0x05, 0x01, 0x00, 0x01}
+	ip := net.ParseIP(host).To4()
+	if ip == nil {
+		conn.Close()
+		return errors.New("invalid IPv4 for UDPGW")
+	}
+	req = append(req, ip...)
+	portBuf := make([]byte, 2)
+	binary.BigEndian.PutUint16(portBuf, uint16(port))
+	req = append(req, portBuf...)
+
+	conn.Write(req)
+
+	// Read Reply
+	// VER, REP, RSV, ATYP, BND.ADDR, BND.PORT
+	// Minimal 10 bytes (IPv4)
+	respHeader := make([]byte, 4)
+	if _, err := io.ReadFull(conn, respHeader); err != nil {
+		conn.Close()
+		return err
+	}
+	if respHeader[1] != 0x00 {
+		conn.Close()
+		return fmt.Errorf("SOCKS5 connect failed: %d", respHeader[1])
+	}
+	
+	// Skip bind address (variable length)
+	addrType := respHeader[3]
+	var skip int
+	switch addrType {
+	case 0x01: skip = 4 + 2 // IPv4
+	case 0x03: // Domain
+		lenBuf := make([]byte, 1)
+		io.ReadFull(conn, lenBuf)
+		skip = int(lenBuf[0]) + 2
+	case 0x04: skip = 16 + 2 // IPv6
+	}
+	io.CopyN(io.Discard, conn, int64(skip))
+
+	c.mu.Lock()
+	c.conn = conn
+	c.mu.Unlock()
+	return nil
+}
+
+func (c *Client) keepAlive() {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-m.ctx.Done():
+		case <-c.ctx.Done():
 			return
 		case <-ticker.C:
-			m.mu.Lock()
-			conn := m.conn
-			m.mu.Unlock()
+			c.mu.Lock()
+			conn := c.conn
+			c.mu.Unlock()
+			if conn == nil {
+				return
+			}
+			// KeepAlive: Len=3 (1 Flag + 2 ID), Flag=0x01, ID=0
+			buf := []byte{0x03, 0x00, FlagKeepAlive, 0x00, 0x00}
+			conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+			if _, err := conn.Write(buf); err != nil {
+				conn.Close() // Will trigger readLoop failure
+				return
+			}
+		}
+	}
+}
 
-			if conn != nil {
-				// KeepAlive Packet: Size(3) + Flags(1) + ID(2)
-				// Flags = 0x01
-				buf := make([]byte, 2+headerSize)
-				binary.LittleEndian.PutUint16(buf[0:2], uint16(headerSize))
-				buf[2] = flagKeepAlive
-				binary.LittleEndian.PutUint16(buf[3:5], 0)
-				conn.Write(buf)
+func (c *Client) readLoop() {
+	// Re-usable buffers?
+	// Header is small (2 bytes len)
+	header := make([]byte, 2)
+	
+	for {
+		c.mu.Lock()
+		conn := c.conn
+		c.mu.Unlock()
+		if conn == nil {
+			return
+		}
+
+		// Read Length
+		conn.SetReadDeadline(time.Now().Add(120 * time.Second)) // Keepalive is 10s, so 120s is ample
+		if _, err := io.ReadFull(conn, header); err != nil {
+			return
+		}
+		length := binary.LittleEndian.Uint16(header)
+
+		// Read Payload
+		payload := make([]byte, length)
+		if _, err := io.ReadFull(conn, payload); err != nil {
+			return
+		}
+
+		if length < 3 {
+			continue // Too short
+		}
+
+		flags := payload[0]
+		connID := binary.LittleEndian.Uint16(payload[1:3])
+
+		if flags&FlagKeepAlive != 0 {
+			// Log keepalive? No, noise.
+			continue
+		}
+
+		var ip netip.Addr
+		var port uint16
+		var data []byte
+
+		offset := 3
+		if flags&FlagIPv6 != 0 {
+			if len(payload) < offset+16+2 {
+				continue
+			}
+			ip, _ = netip.AddrFromSlice(payload[offset : offset+16])
+			offset += 16
+		} else {
+			if len(payload) < offset+4+2 {
+				continue
+			}
+			ip, _ = netip.AddrFromSlice(payload[offset : offset+4])
+			offset += 4
+		}
+
+		port = binary.BigEndian.Uint16(payload[offset : offset+2])
+		offset += 2
+		data = payload[offset:]
+
+		// Dispatch
+		c.mu.Lock()
+		ch, ok := c.conns[connID]
+		c.mu.Unlock()
+
+		if ok {
+			select {
+			case ch <- &Packet{
+				DstIP:   ip,
+				DstPort: port,
+				Data:    data,
+			}:
+			default:
+				// Drop if channel full
 			}
 		}
 	}

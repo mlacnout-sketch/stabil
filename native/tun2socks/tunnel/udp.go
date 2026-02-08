@@ -12,6 +12,7 @@ import (
 	"github.com/xjasonlyu/tun2socks/v2/log"
 	M "github.com/xjasonlyu/tun2socks/v2/metadata"
 	"github.com/xjasonlyu/tun2socks/v2/tunnel/statistic"
+	"github.com/xjasonlyu/tun2socks/v2/badvpn"
 )
 
 // TODO: Port Restricted NAT support.
@@ -25,6 +26,16 @@ func (t *Tunnel) handleUDPConn(uc adapter.UDPConn) {
 	}
 
 	defer uc.Close()
+
+	// BadVPN / UDPGW Path
+	t.badvpnMu.RLock()
+	client := t.badvpnClient
+	t.badvpnMu.RUnlock()
+
+	if client != nil {
+		t.handleBadVPNUDP(uc, client)
+		return
+	}
 
 	metadata := &M.Metadata{
 		Network: M.UDP,
@@ -56,6 +67,48 @@ func (t *Tunnel) handleUDPConn(uc adapter.UDPConn) {
 
 	log.Infof("[UDP] %s <-> %s", metadata.SourceAddress(), metadata.DestinationAddress())
 	pipePacket(uc, pc, remote, t.udpTimeout.Load())
+}
+
+func (t *Tunnel) handleBadVPNUDP(uc adapter.UDPConn, client *badvpn.Client) {
+	id := uc.ID()
+	dstIP := parseTCPIPAddress(id.LocalAddress)
+	dstPort := id.LocalPort
+
+	connID, ch := client.Register()
+	defer client.Unregister(connID)
+
+	// log.Infof("[UDPGW] New Flow %d -> %s:%d", connID, dstIP, dstPort)
+
+	// Goroutine to read from UDPGW and write to TUN
+	go func() {
+		for packet := range ch {
+			fromAddr := &net.UDPAddr{
+				IP:   packet.DstIP.AsSlice(),
+				Port: int(packet.DstPort),
+			}
+			uc.WriteTo(packet.Data, fromAddr)
+		}
+	}()
+
+	// Main loop: Read from TUN and write to UDPGW
+	buf := buffer.Get(buffer.MaxSegmentSize)
+	defer buffer.Put(buf)
+
+	timeout := t.udpTimeout.Load()
+
+	for {
+		uc.SetReadDeadline(time.Now().Add(timeout))
+		n, _, err := uc.ReadFrom(buf)
+		if err != nil {
+			break
+		}
+
+		err = client.WritePacket(connID, dstIP, dstPort, buf[:n])
+		if err != nil {
+			// log.Warnf("[UDPGW] Write failed: %v", err)
+			break
+		}
+	}
 }
 
 func pipePacket(origin, remote net.PacketConn, to net.Addr, timeout time.Duration) {
@@ -135,7 +188,7 @@ func (pc *restrictedNATPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 				}
 			}
 
-			if fromAddr.IsValid() && fromAddr != pc.dstIP {
+			if fromAddr.IsValid() && fromAddr.Unmap() != pc.dstIP.Unmap() {
 				// Log dropped packet (rate limiting recommended in production)
 				// log.Warnf("[UDP] restricted NAT %s->%s: drop packet from %s", pc.src, pc.dstIP, from)
 				continue
