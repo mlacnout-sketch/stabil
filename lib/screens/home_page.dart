@@ -348,6 +348,8 @@ class _HomePageState extends State<HomePage> {
           "port_range": prefs.getString('port_range') ?? "6000-19999",
           "pass": prefs.getString('auth') ?? "",
           "obfs": prefs.getString('obfs') ?? "hu``hqb`c",
+          "up_mbps": prefs.getString('up_mbps') ?? "15",
+          "down_mbps": prefs.getString('down_mbps') ?? "20",
           "recv_window_multiplier": 4.0,
           "udp_mode": "udp",
           "mtu": int.tryParse(prefs.getString('mtu') ?? "1200") ?? 1200,

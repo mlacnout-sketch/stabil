@@ -136,6 +136,8 @@ class ZivpnService : VpnService() {
         val range = prefs.getString("server_range", "") ?: ""
         val pass = prefs.getString("server_pass", "") ?: ""
         val obfs = prefs.getString("server_obfs", "") ?: ""
+        val upMbps = prefs.getString("up_mbps", "15") ?: "15"
+        val downMbps = prefs.getString("down_mbps", "20") ?: "20"
         val multiplier = prefs.getFloat("multiplier", 1.0f)
         val mtu = prefs.getInt("mtu", 1500)
         val logLevel = prefs.getString("log_level", "info") ?: "info"
@@ -152,7 +154,7 @@ class ZivpnService : VpnService() {
         // 1. START HYSTERIA & LOAD BALANCER
         try {
             startPdnsd()
-            startCores(ip, range, pass, obfs, multiplier.toDouble(), coreCount, logLevel)
+            startCores(ip, range, pass, obfs, upMbps, downMbps, multiplier.toDouble(), coreCount, logLevel)
         } catch (e: Exception) {
             Log.e("ZIVPN-Tun", "Failed to start cores: ${e.message}")
             stopSelf()
@@ -288,7 +290,7 @@ class ZivpnService : VpnService() {
         logToApp("DNS Gateway active on 169.254.1.1:8091")
     }
 
-    private fun startCores(ip: String, range: String, pass: String, obfs: String, multiplier: Double, coreCount: Int, logLevel: String) {
+    private fun startCores(ip: String, range: String, pass: String, obfs: String, upMbps: String, downMbps: String, multiplier: Double, coreCount: Int, logLevel: String) {
         val libDir = applicationInfo.nativeLibraryDir
         val libUz = File(libDir, "libuz.so").absolutePath
         val libLoad = File(libDir, "libload.so").absolutePath
@@ -315,6 +317,8 @@ class ZivpnService : VpnService() {
             hyConfig.put("obfs", obfs)
             hyConfig.put("auth", pass)
             hyConfig.put("loglevel", hyLogLevel)
+            hyConfig.put("up", "$upMbps mbps")
+            hyConfig.put("down", "$downMbps mbps")
             
             val socks5Json = JSONObject()
             socks5Json.put("listen", "127.0.0.1:$port")

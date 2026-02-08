@@ -24,6 +24,8 @@ class SettingsTab extends StatefulWidget {
 class _SettingsTabState extends State<SettingsTab> {
   final _mtuCtrl = TextEditingController();
   final _pingTargetCtrl = TextEditingController();
+  final _upMbpsCtrl = TextEditingController();
+  final _downMbpsCtrl = TextEditingController();
 
   bool _autoTuning = true;
   bool _cpuWakelock = false;
@@ -91,6 +93,8 @@ class _SettingsTabState extends State<SettingsTab> {
     setState(() {
       _mtuCtrl.text = prefs.getString('mtu') ?? "1200";
       _pingTargetCtrl.text = prefs.getString('ping_target') ?? "http://www.gstatic.com/generate_204";
+      _upMbpsCtrl.text = prefs.getString('up_mbps') ?? "15";
+      _downMbpsCtrl.text = prefs.getString('down_mbps') ?? "20";
       _autoTuning = prefs.getBool('auto_tuning') ?? true;
       _cpuWakelock = prefs.getBool('cpu_wakelock') ?? false;
       _bufferSize = prefs.getString('buffer_size') ?? "4m";
@@ -103,6 +107,8 @@ class _SettingsTabState extends State<SettingsTab> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('mtu', _mtuCtrl.text);
     await prefs.setString('ping_target', _pingTargetCtrl.text);
+    await prefs.setString('up_mbps', _upMbpsCtrl.text);
+    await prefs.setString('down_mbps', _downMbpsCtrl.text);
     await prefs.setBool('auto_tuning', _autoTuning);
     await prefs.setBool('cpu_wakelock', _cpuWakelock);
     await prefs.setString('buffer_size', _bufferSize);
@@ -135,6 +141,26 @@ class _SettingsTabState extends State<SettingsTab> {
                   _mtuCtrl,
                   "MTU (Default: 1500)",
                   Icons.settings_ethernet,
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildTextInput(
+                        _upMbpsCtrl,
+                        "Up (Mbps)",
+                        Icons.upload,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildTextInput(
+                        _downMbpsCtrl,
+                        "Down (Mbps)",
+                        Icons.download,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 _buildTextInput(

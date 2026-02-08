@@ -123,6 +123,8 @@ class MainActivity: FlutterActivity() {
                 val range = call.argument<String>("port_range") ?: "6000-19999"
                 val pass = call.argument<String>("pass") ?: ""
                 val obfs = call.argument<String>("obfs") ?: "hu``hqb`c"
+                val upMbps = call.argument<String>("up_mbps") ?: "15"
+                val downMbps = call.argument<String>("down_mbps") ?: "20"
                 val multiplier = call.argument<Double>("recv_window_multiplier") ?: 1.0
                 val udpMode = call.argument<String>("udp_mode") ?: "tcp"
                 
@@ -141,6 +143,8 @@ class MainActivity: FlutterActivity() {
                     .putString("server_range", range)
                     .putString("server_pass", pass)
                     .putString("server_obfs", obfs)
+                    .putString("up_mbps", upMbps)
+                    .putString("down_mbps", downMbps)
                     .putFloat("multiplier", multiplier.toFloat())
                     .putString("udp_mode", udpMode)
                     .putInt("mtu", mtu)
