@@ -202,11 +202,11 @@ class ZivpnService : VpnService() {
             }
         }
         
-        // Intercept common DNS IPs to prevent leaks
+        // Intercept common Public DNS IPs to prevent leaks
         val dnsToHijack = listOf(
             "1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4", "9.9.9.9", 
-            "149.112.112.112", "208.67.222.222", "208.67.220.220",
-            "112.215.198.248", "112.215.198.249" // Common ISP DNS (XL/Tsel)
+            "149.112.112.112", "208.67.222.222", "208.67.220.220"
+            // ISP DNS removed because they often timeout inside the tunnel
         )
         for (dns in dnsToHijack) {
             try { builder.addRoute(dns, 32) } catch (e: Exception) {}
@@ -218,6 +218,7 @@ class ZivpnService : VpnService() {
 
         builder.addDnsServer("1.1.1.1")
         builder.addDnsServer("8.8.8.8")
+        builder.addDnsServer("9.9.9.9")
         builder.addAddress("172.19.0.1", 30)
 
         try {

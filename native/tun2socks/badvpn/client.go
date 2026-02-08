@@ -27,7 +27,14 @@ var (
 const (
 	FlagKeepAlive = 0x01
 	FlagIPv6      = 0x08
+	FlagData      = 0x04
 )
+
+var bufPool = sync.Pool{
+	New: func() any {
+		return make([]byte, 2048)
+	},
+}
 
 // Packet represents a received UDP packet
 type Packet struct {
@@ -86,7 +93,7 @@ func (c *Client) Register() (uint16, <-chan *Packet) {
 		}
 	}
 
-	ch := make(chan *Packet, 64)
+	ch := make(chan *Packet, 128) // Increased buffer size
 	c.conns[id] = ch
 	return id, ch
 }
@@ -96,6 +103,7 @@ func (c *Client) Unregister(id uint16) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if ch, ok := c.conns[id]; ok {
+		// Drain and close?
 		close(ch)
 		delete(c.conns, id)
 	}
@@ -120,17 +128,25 @@ func (c *Client) WritePacket(connID uint16, dest netip.Addr, port uint16, data [
 	// Header: 2 bytes Len
 	// Payload: 1 Flags + 2 ID + Addr + 2 Port + Data
 	payloadLen := 1 + 2 + addrLen + 2 + len(data)
-	buf := make([]byte, 2+payloadLen)
+	
+	// Use pool for large packets
+	var buf []byte
+	if payloadLen+2 <= 2048 {
+		buf = bufPool.Get().([]byte)[:payloadLen+2]
+		defer bufPool.Put(buf[:2048])
+	} else {
+		buf = make([]byte, payloadLen+2)
+	}
 
 	// Length (Little Endian)
 	binary.LittleEndian.PutUint16(buf[0:2], uint16(payloadLen))
 
 	// Flags
+	flags := uint8(FlagData)
 	if isIPv6 {
-		buf[2] = FlagIPv6
-	} else {
-		buf[2] = 0x00
+		flags |= FlagIPv6
 	}
+	buf[2] = flags
 
 	// ConnID (Little Endian)
 	binary.LittleEndian.PutUint16(buf[3:5], connID)
@@ -148,8 +164,6 @@ func (c *Client) WritePacket(connID uint16, dest netip.Addr, port uint16, data [
 		copy(buf[11:], data)
 	}
 
-	// Write atomically? No, net.Conn is thread-safe but writing multiple chunks might interleave.
-	// We constructed a single buffer, so single Write call is atomic enough.
 	conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	_, err := conn.Write(buf)
 	return err
