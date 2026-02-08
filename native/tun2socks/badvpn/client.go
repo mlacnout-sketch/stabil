@@ -15,6 +15,15 @@ import (
 	"github.com/xjasonlyu/tun2socks/v2/proxy"
 )
 
+var (
+	// LocalSocksAddr is the address of the local SOCKS5 proxy to connect through.
+	// Can be modified for testing.
+	LocalSocksAddr = "127.0.0.1:7777"
+	
+	// KeepAliveInterval default 10s
+	KeepAliveInterval = 10 * time.Second
+)
+
 const (
 	FlagKeepAlive = 0x01
 	FlagIPv6      = 0x08
@@ -217,7 +226,7 @@ func (c *Client) connect() error {
 	// However, we are INSIDE tun2socks process. We can use the Proxy interface directly.
 	
 	// Let's assume we connect to local SOCKS5 (7777) via TCP.
-	conn, err := net.DialTimeout("tcp", "127.0.0.1:7777", 5*time.Second)
+	conn, err := net.DialTimeout("tcp", LocalSocksAddr, 5*time.Second)
 	if err != nil {
 		return err
 	}
@@ -283,7 +292,7 @@ func (c *Client) connect() error {
 }
 
 func (c *Client) keepAlive() {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(KeepAliveInterval)
 	defer ticker.Stop()
 
 	for {
