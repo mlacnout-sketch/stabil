@@ -181,24 +181,21 @@ class ZivpnService : VpnService() {
         builder.setConfigureIntent(pendingIntent)
         builder.setMtu(mtu)
         
-        // GLOBAL ROUTING: Catch EVERYTHING
-        try {
-            builder.addRoute("0.0.0.0", 0)
-            // Handle Fake-IP range (198.18.0.0/15) to prevent "host unreachable" errors
-            builder.addRoute("198.18.0.0", 15)
-        } catch (e: Exception) {
-            Log.e("ZIVPN-Tun", "Failed to add global route, falling back to subnets")
-            // Fallback to stable subnets if 0.0.0.0/0 is rejected by system
-            val subnets = listOf(
-                "0.0.0.0" to 5, "8.0.0.0" to 7, "11.0.0.0" to 8, "12.0.0.0" to 6,
-                "16.0.0.0" to 4, "32.0.0.0" to 3, "64.0.0.0" to 2, "128.0.0.0" to 3,
-                "160.0.0.0" to 5, "168.0.0.0" to 6, "176.0.0.0" to 4, "192.0.0.0" to 9,
-                "192.128.0.0" to 11, "192.160.0.0" to 13, "192.169.0.0" to 16,
-                "192.170.0.0" to 15, "192.172.0.0" to 14, "193.0.0.0" to 8,
-                "194.0.0.0" to 7, "196.0.0.0" to 6, "200.0.0.0" to 3
-            )
-            for ((addr, mask) in subnets) {
-                try { builder.addRoute(addr, mask) } catch (ex: Exception) {}
+        // MORE SPECIFIC ROUTES (Mimicking ZIVPN Original Strategy)
+        // This prevents leaks and gives higher priority than default gateway
+        val specificRoutes = listOf(
+            "0.0.0.0" to 5, "8.0.0.0" to 7, "11.0.0.0" to 8, "12.0.0.0" to 6,
+            "16.0.0.0" to 4, "32.0.0.0" to 3, "64.0.0.0" to 2, "128.0.0.0" to 4,
+            "144.0.0.0" to 6, "148.0.0.0" to 7, "150.0.0.0" to 8, "151.0.0.0" to 9,
+            "151.128.0.0" to 10, "151.192.0.0" to 11, "151.224.0.0" to 12,
+            "152.0.0.0" to 5, "160.0.0.0" to 3, "192.0.0.0" to 2,
+            // RFC1918 Private Ranges
+            "10.0.0.0" to 8, "172.16.0.0" to 12, "192.168.0.0" to 16
+        )
+
+        for ((addr, mask) in specificRoutes) {
+            try { builder.addRoute(addr, mask) } catch (e: Exception) {
+                Log.e("ZIVPN-Tun", "Failed to add route $addr/$mask: ${e.message}")
             }
         }
         
@@ -206,7 +203,6 @@ class ZivpnService : VpnService() {
         val dnsToHijack = listOf(
             "1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4", "9.9.9.9", 
             "149.112.112.112", "208.67.222.222", "208.67.220.220"
-            // ISP DNS removed because they often timeout inside the tunnel
         )
         for (dns in dnsToHijack) {
             try { builder.addRoute(dns, 32) } catch (e: Exception) {}
@@ -219,7 +215,7 @@ class ZivpnService : VpnService() {
         builder.addDnsServer("1.1.1.1")
         builder.addDnsServer("8.8.8.8")
         builder.addDnsServer("9.9.9.9")
-        builder.addAddress("172.19.0.1", 30)
+        builder.addAddress("169.254.1.1", 24)
 
         try {
             vpnInterface = builder.establish()
