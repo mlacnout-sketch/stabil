@@ -197,7 +197,7 @@ class ZivpnService : VpnService() {
 
             // 3. Start BadVPN Tun2Socks (C Binary)
             val libDir = applicationInfo.nativeLibraryDir
-            val libTun = File(libDir, "libtun2socks_c.so").absolutePath
+            val libTun = File(libDir, "libtun2socks.so").absolutePath
             
             val tunCmd = arrayListOf(
                 libTun,
@@ -230,8 +230,8 @@ class ZivpnService : VpnService() {
 
     private fun startCores(ip: String, range: String, pass: String, obfs: String, multiplier: Double, coreCount: Int, logLevel: String) {
         val libDir = applicationInfo.nativeLibraryDir
-        val libUz = File(libDir, "libuz_c.so").absolutePath
-        val libLoad = File(libDir, "libload_c.so").absolutePath
+        val libUz = File(libDir, "libuz.so").absolutePath
+        val libLoad = File(libDir, "libload.so").absolutePath
         
         val baseConn = 131072
         val baseWin = 327680
@@ -324,7 +324,7 @@ class ZivpnService : VpnService() {
         Thread {
             try {
                 // Brute force kill ZIVPN binaries
-                val cleanupCmd = arrayOf("sh", "-c", "pkill -9 libuz_c; pkill -9 libload_c; pkill -9 libtun2socks_c; pkill -9 libuz_c.so; pkill -9 libload_c.so; pkill -9 libtun2socks_c.so")
+                val cleanupCmd = arrayOf("sh", "-c", "pkill -9 libuz; pkill -9 libload; pkill -9 libtun2socks; pkill -9 libuz.so; pkill -9 libload.so; pkill -9 libtun2socks.so")
                 Runtime.getRuntime().exec(cleanupCmd).waitFor()
             } catch (e: Exception) {}
         }.start()
