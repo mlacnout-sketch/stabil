@@ -227,6 +227,7 @@ class ZivpnService : VpnService() {
                 "--dnsgw", "169.254.1.1:8091"
             )
             
+            logToApp("Starting Engine: libtun2socks.so...")
             val tunPb = ProcessBuilder(tunCmd)
             tunPb.directory(filesDir)
             tunPb.environment()["LD_LIBRARY_PATH"] = libDir
@@ -236,7 +237,7 @@ class ZivpnService : VpnService() {
             processes.add(tunProc)
             captureProcessLog(tunProc, "Tun2Socks-C")
             
-            logToApp("BadVPN Engine Started with UDPGW and DNSGW support.")
+            logToApp("BadVPN Engine Started successfully.")
             prefs.edit().putBoolean("flutter.vpn_running", true).apply()
 
         } catch (e: Throwable) {
@@ -311,6 +312,20 @@ class ZivpnService : VpnService() {
             else -> "info"
         }
 
+        /**
+         * Hysteria Core Parameters (libuz.so):
+         * -s [obfs]: Obfuscation password.
+         * --config [json_string]: Complete configuration in JSON format.
+         * 
+         * JSON Config Fields:
+         * "server": Remote server address (IP:Range).
+         * "obfs": Obfuscation password.
+         * "auth": Authentication password.
+         * "up"/"down": Bandwidth limits.
+         * "socks5": Local SOCKS5 listener config.
+         * "udpgw": Local UDPGW listener config (port 7300).
+         * "insecure": Allow self-signed certificates.
+         */
         for (port in ports) {
             val hyConfig = JSONObject()
             hyConfig.put("server", "$ip:$range")
@@ -334,6 +349,8 @@ class ZivpnService : VpnService() {
             hyConfig.put("recvwindow", dynamicWin)
             
             val hyCmd = arrayListOf(libUz, "-s", obfs, "--config", hyConfig.toString())
+            
+            logToApp("Starting Hysteria Core on port $port...")
             val hyPb = ProcessBuilder(hyCmd)
             hyPb.directory(filesDir)
             hyPb.environment()["LD_LIBRARY_PATH"] = libDir
@@ -348,9 +365,15 @@ class ZivpnService : VpnService() {
         logToApp("Waiting for cores to warm up...")
         Thread.sleep(1500)
 
+        /**
+         * Load Balancer Parameters (libload.so):
+         * -lport [port]: Port to listen for combined SOCKS5 traffic (7777).
+         * -tunnel [target1] [target2] ...: List of Hysteria SOCKS5 endpoints to balance.
+         */
         val lbCmd = mutableListOf(libLoad, "-lport", "7777", "-tunnel")
         lbCmd.addAll(tunnelTargets)
         
+        logToApp("Starting Load Balancer on port 7777...")
         val lbPb = ProcessBuilder(lbCmd)
         lbPb.directory(filesDir)
         lbPb.environment()["LD_LIBRARY_PATH"] = libDir
@@ -359,7 +382,7 @@ class ZivpnService : VpnService() {
         val lbProcess = lbPb.start()
         processes.add(lbProcess)
         captureProcessLog(lbProcess, "LoadBalancer")
-        logToApp("Load Balancer active on port 7777")
+        logToApp("Load Balancer active.")
     }
 
     private fun disconnect() {
