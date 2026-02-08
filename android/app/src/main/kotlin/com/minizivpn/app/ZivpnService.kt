@@ -230,7 +230,7 @@ class ZivpnService : VpnService() {
                 try {
                     val udpTimeout = 60000L
                     val finalMtu = mtu.toLong()
-                    logToApp("Starting Engine: MTU=$finalMtu, Buf=$bufferSize, AutoTune=$autoTuning, Log=$logLevel")
+                    logToApp("Starting Engine: MTU=$finalMtu, Buf=$bufferSize, AutoTune=$autoTuning, Log=$logLevel, Wakelock=$useWakelock")
                     mobile.Mobile.setLogHandler(tunLogger)
                     mobile.Mobile.start(
                         "socks5://127.0.0.1:7777",
