@@ -111,7 +111,7 @@ func TestClient_WritePacket(t *testing.T) {
 		assert.Equal(t, uint16(expectedLen), pktLen)
 		
 		body := data[2:]
-		assert.Equal(t, uint8(0x00), body[0]) // Flags
+		assert.Equal(t, uint8(FlagData), body[0]) // Flags
 		assert.Equal(t, connID, binary.LittleEndian.Uint16(body[1:3])) // ID
 		assert.Equal(t, dstIP.AsSlice(), body[3:7]) // IP
 		assert.Equal(t, dstPort, binary.BigEndian.Uint16(body[7:9])) // Port
@@ -192,7 +192,7 @@ func TestClient_IPv6(t *testing.T) {
 	case data := <-recvCh:
 		// Verify Flag
 		flags := data[2]
-		assert.Equal(t, uint8(FlagIPv6), flags&FlagIPv6)
+		assert.Equal(t, uint8(FlagIPv6|FlagData), flags)
 		
 		// Verify Length (16 bytes IP)
 		// 1 + 2 + 16 + 2 + len = 21 + len
