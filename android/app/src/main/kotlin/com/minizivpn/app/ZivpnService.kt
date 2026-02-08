@@ -16,7 +16,6 @@ import android.content.pm.ServiceInfo
 import java.net.InetAddress
 import java.util.LinkedList
 import androidx.annotation.Keep
-import mobile.Mobile
 import java.io.File
 import org.json.JSONObject
 
@@ -43,14 +42,6 @@ class ZivpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private val processes = mutableListOf<Process>()
     private var wakeLock: PowerManager.WakeLock? = null
-
-    private val tunLogger = object : mobile.LogHandler {
-        override fun writeLog(message: String?) {
-            if (message != null) {
-                logToApp("[Tun2Socks] $message")
-            }
-        }
-    }
 
     private fun logToApp(msg: String) {
         val intent = Intent(ACTION_LOG)
@@ -137,7 +128,7 @@ class ZivpnService : VpnService() {
     private fun connect() {
         if (vpnInterface != null) return
 
-        Log.i("ZIVPN-Tun", "Initializing ZIVPN (tun2socks engine)...")
+        Log.i("ZIVPN-Tun", "Initializing ZIVPN (BadVPN C engine)...")
         
         val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
         
@@ -147,8 +138,6 @@ class ZivpnService : VpnService() {
         val obfs = prefs.getString("server_obfs", "") ?: ""
         val multiplier = prefs.getFloat("multiplier", 1.0f)
         val mtu = prefs.getInt("mtu", 1500)
-        val autoTuning = prefs.getBoolean("auto_tuning", true)
-        val bufferSize = prefs.getString("buffer_size", "4m") ?: "4m"
         val logLevel = prefs.getString("log_level", "info") ?: "info"
         val coreCount = prefs.getInt("core_count", 4)
         val useWakelock = prefs.getBoolean("cpu_wakelock", false)
@@ -180,44 +169,25 @@ class ZivpnService : VpnService() {
         builder.setConfigureIntent(pendingIntent)
         builder.setMtu(mtu)
         
-        // GLOBAL ROUTING: Catch EVERYTHING
+        // ZIVPN Style IP/Route
+        builder.addAddress("169.254.1.2", 24)
+        builder.addDnsServer("1.1.1.1")
+        builder.addDnsServer("8.8.8.8")
+        
         try {
             builder.addRoute("0.0.0.0", 0)
-            // Handle Fake-IP range (198.18.0.0/15) to prevent "host unreachable" errors
-            builder.addRoute("198.18.0.0", 15)
         } catch (e: Exception) {
-            Log.e("ZIVPN-Tun", "Failed to add global route, falling back to subnets")
-            // Fallback to stable subnets if 0.0.0.0/0 is rejected by system
             val subnets = listOf(
-                "0.0.0.0" to 5, "8.0.0.0" to 7, "11.0.0.0" to 8, "12.0.0.0" to 6,
-                "16.0.0.0" to 4, "32.0.0.0" to 3, "64.0.0.0" to 2, "128.0.0.0" to 3,
-                "160.0.0.0" to 5, "168.0.0.0" to 6, "176.0.0.0" to 4, "192.0.0.0" to 9,
-                "192.128.0.0" to 11, "192.160.0.0" to 13, "192.169.0.0" to 16,
-                "192.170.0.0" to 15, "192.172.0.0" to 14, "193.0.0.0" to 8,
-                "194.0.0.0" to 7, "196.0.0.0" to 6, "200.0.0.0" to 3
+                "0.0.0.0" to 1, "128.0.0.0" to 1
             )
             for ((addr, mask) in subnets) {
                 try { builder.addRoute(addr, mask) } catch (ex: Exception) {}
             }
         }
-        
-        // Intercept common DNS IPs to prevent leaks
-        val dnsToHijack = listOf(
-            "1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4", "9.9.9.9", 
-            "149.112.112.112", "208.67.222.222", "208.67.220.220",
-            "112.215.198.248", "112.215.198.249" // Common ISP DNS (XL/Tsel)
-        )
-        for (dns in dnsToHijack) {
-            try { builder.addRoute(dns, 32) } catch (e: Exception) {}
-        }
 
         try {
             builder.addDisallowedApplication(packageName)
         } catch (e: Exception) {}
-
-        builder.addDnsServer("1.1.1.1")
-        builder.addDnsServer("8.8.8.8")
-        builder.addAddress("172.19.0.1", 30)
 
         try {
             vpnInterface = builder.establish()
@@ -225,29 +195,31 @@ class ZivpnService : VpnService() {
 
             Log.i("ZIVPN-Tun", "VPN Interface established. FD: $fd")
 
-            // 3. Start tun2socks (Go/gVisor Engine) via JNI
-            Thread {
-                try {
-                    val udpTimeout = 60000L
-                    val finalMtu = mtu.toLong()
-                    logToApp("Starting Engine: MTU=$finalMtu, Buf=$bufferSize, AutoTune=$autoTuning, Log=$logLevel, Wakelock=$useWakelock")
-                    mobile.Mobile.setLogHandler(tunLogger)
-                    mobile.Mobile.start(
-                        "socks5://127.0.0.1:7777",
-                        "fd://$fd",
-                        logLevel,
-                        finalMtu,
-                        udpTimeout,
-                        bufferSize, 
-                        bufferSize, 
-                        autoTuning
-                    )
-                    logToApp("Tun2Socks Engine Started successfully.")
-                } catch (e: Exception) {
-                    logToApp("Engine Error: ${e.message}")
-                }
-            }.start()
-
+            // 3. Start BadVPN Tun2Socks (C Binary)
+            val libDir = applicationInfo.nativeLibraryDir
+            val libTun = File(libDir, "libtun2socks_c.so").absolutePath
+            
+            val tunCmd = arrayListOf(
+                libTun,
+                "--netif-ipaddr", "169.254.1.2",
+                "--netif-netmask", "255.255.255.0",
+                "--socks-server-addr", "127.0.0.1:7777",
+                "--tunmtu", mtu.toString(),
+                "--tunfd", fd.toString(),
+                "--loglevel", "3",
+                "--udpgw-remote-server-addr", "127.0.0.1:7300"
+            )
+            
+            val tunPb = ProcessBuilder(tunCmd)
+            tunPb.directory(filesDir)
+            tunPb.environment()["LD_LIBRARY_PATH"] = libDir
+            tunPb.redirectErrorStream(true)
+            
+            val tunProc = tunPb.start()
+            processes.add(tunProc)
+            captureProcessLog(tunProc, "Tun2Socks-C")
+            
+            logToApp("BadVPN Engine Started with UDPGW support.")
             prefs.edit().putBoolean("flutter.vpn_running", true).apply()
 
         } catch (e: Throwable) {
@@ -258,8 +230,8 @@ class ZivpnService : VpnService() {
 
     private fun startCores(ip: String, range: String, pass: String, obfs: String, multiplier: Double, coreCount: Int, logLevel: String) {
         val libDir = applicationInfo.nativeLibraryDir
-        val libUz = File(libDir, "libuz.so").absolutePath
-        val libLoad = File(libDir, "libload.so").absolutePath
+        val libUz = File(libDir, "libuz_c.so").absolutePath
+        val libLoad = File(libDir, "libload_c.so").absolutePath
         
         val baseConn = 131072
         val baseWin = 327680
@@ -287,6 +259,11 @@ class ZivpnService : VpnService() {
             val socks5Json = JSONObject()
             socks5Json.put("listen", "127.0.0.1:$port")
             hyConfig.put("socks5", socks5Json)
+            
+            // ENABLE UDPGW SERVER in Hysteria Core
+            val udpgwJson = JSONObject()
+            udpgwJson.put("listen", "127.0.0.1:7300")
+            hyConfig.put("udpgw", udpgwJson)
             
             hyConfig.put("insecure", true)
             hyConfig.put("recvwindowconn", dynamicConn)
@@ -330,11 +307,7 @@ class ZivpnService : VpnService() {
         }
         wakeLock = null
         
-        try {
-            mobile.Mobile.stop()
-        } catch (e: Exception) {
-            Log.e("ZIVPN-Tun", "Error stopping Mobile engine: ${e.message}")
-        }
+        // Remove mobile.Mobile.stop() as we don't use the AAR anymore
 
         processes.forEach { 
             try {
@@ -350,7 +323,8 @@ class ZivpnService : VpnService() {
         // Optimized: Run cleanup in background to prevent ANR
         Thread {
             try {
-                val cleanupCmd = arrayOf("sh", "-c", "pkill -9 libuz; pkill -9 libload; pkill -9 libuz.so; pkill -9 libload.so")
+                // Brute force kill ZIVPN binaries
+                val cleanupCmd = arrayOf("sh", "-c", "pkill -9 libuz_c; pkill -9 libload_c; pkill -9 libtun2socks_c; pkill -9 libuz_c.so; pkill -9 libload_c.so; pkill -9 libtun2socks_c.so")
                 Runtime.getRuntime().exec(cleanupCmd).waitFor()
             } catch (e: Exception) {}
         }.start()
