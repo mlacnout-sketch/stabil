@@ -151,6 +151,7 @@ class ZivpnService : VpnService() {
 
         // 1. START HYSTERIA & LOAD BALANCER
         try {
+            startPdnsd()
             startCores(ip, range, pass, obfs, multiplier.toDouble(), coreCount, logLevel)
         } catch (e: Exception) {
             Log.e("ZIVPN-Tun", "Failed to start cores: ${e.message}")
@@ -209,7 +210,8 @@ class ZivpnService : VpnService() {
                 "--tunfd", fd.toString(),
                 "--loglevel", "3",
                 "--udpgw-remote-server-addr", "127.0.0.1:7300",
-                "--sock", sockPath
+                "--sock", sockPath,
+                "--dnsgw", "169.254.1.1:8091"
             )
             
             val tunPb = ProcessBuilder(tunCmd)
@@ -221,13 +223,58 @@ class ZivpnService : VpnService() {
             processes.add(tunProc)
             captureProcessLog(tunProc, "Tun2Socks-C")
             
-            logToApp("BadVPN Engine Started with UDPGW support.")
+            logToApp("BadVPN Engine Started with UDPGW and DNSGW support.")
             prefs.edit().putBoolean("flutter.vpn_running", true).apply()
 
         } catch (e: Throwable) {
             Log.e("ZIVPN-Tun", "Error starting VPN: ${e.message}")
             stopSelf()
         }
+    }
+
+    private fun startPdnsd() {
+        val libDir = applicationInfo.nativeLibraryDir
+        val libPdnsd = File(libDir, "libpdnsd.so").absolutePath
+        val confFile = File(filesDir, "pdnsd.conf")
+        
+        val confContent = """
+            global {
+                perm_cache=1024;
+                cache_dir="${filesDir.absolutePath}";
+                server_port = 8091;
+                server_ip = 169.254.1.1;
+                query_method=tcp_only;
+                min_ttl=15m;
+                max_ttl=1w;
+                timeout=10;
+                daemon=off;
+            }
+            server {
+                label= "google1";
+                ip = 8.8.8.8;
+                port = 53;
+                uptest = none;
+            }
+            server {
+                label= "google2";
+                ip = 8.8.4.4;
+                port = 53;
+                uptest = none;
+            }
+        """.trimIndent()
+        
+        confFile.writeText(confContent)
+        
+        val pdnsdCmd = arrayListOf(libPdnsd, "-v9", "-c", confFile.absolutePath)
+        val pdnsdPb = ProcessBuilder(pdnsdCmd)
+        pdnsdPb.directory(filesDir)
+        pdnsdPb.environment()["LD_LIBRARY_PATH"] = libDir
+        pdnsdPb.redirectErrorStream(true)
+        
+        val p = pdnsdPb.start()
+        processes.add(p)
+        captureProcessLog(p, "PDNSD")
+        logToApp("DNS Gateway active on 169.254.1.1:8091")
     }
 
     private fun startCores(ip: String, range: String, pass: String, obfs: String, multiplier: Double, coreCount: Int, logLevel: String) {
@@ -329,7 +376,7 @@ class ZivpnService : VpnService() {
                 if (sockPath.exists()) sockPath.delete()
                 
                 // Brute force kill ZIVPN binaries
-                val cleanupCmd = arrayOf("sh", "-c", "pkill -9 libuz; pkill -9 libload; pkill -9 libtun2socks; pkill -9 libuz.so; pkill -9 libload.so; pkill -9 libtun2socks.so")
+                val cleanupCmd = arrayOf("sh", "-c", "pkill -9 libuz; pkill -9 libload; pkill -9 libtun2socks; pkill -9 libpdnsd; pkill -9 libuz.so; pkill -9 libload.so; pkill -9 libtun2socks.so; pkill -9 libpdnsd.so")
                 Runtime.getRuntime().exec(cleanupCmd).waitFor()
             } catch (e: Exception) {}
         }.start()
