@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:share_plus/share_plus.dart';
+import 'dart:io';
 import '../../app_colors.dart';
+import '../../repositories/backup_repository.dart';
 
 class SettingsTab extends StatefulWidget {
   final VoidCallback onCheckUpdate;
+  final VoidCallback? onRestoreSuccess;
 
-  const SettingsTab({super.key, required this.onCheckUpdate});
+  const SettingsTab({
+    super.key, 
+    required this.onCheckUpdate,
+    this.onRestoreSuccess,
+  });
 
   @override
   State<SettingsTab> createState() => _SettingsTabState();
@@ -22,12 +31,54 @@ class _SettingsTabState extends State<SettingsTab> {
   String _logLevel = "info";
   double _coreCount = 4.0;
   String _appVersion = "Unknown";
+  final _backupRepo = BackupRepository();
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
     _loadVersion();
+  }
+
+  Future<void> _handleBackup() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Creating backup...")),
+    );
+    
+    final file = await _backupRepo.createBackup();
+    if (file != null && mounted) {
+      await Share.shareXFiles([XFile(file.path)], text: "MiniZIVPN Config Backup");
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Backup failed")),
+      );
+    }
+  }
+
+  Future<void> _handleRestore() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['zip'],
+    );
+    
+    if (result != null && result.files.single.path != null) {
+      final file = File(result.files.single.path!);
+      final success = await _backupRepo.restoreBackup(file);
+      
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Restore successful.")),
+          );
+          _loadSettings(); // Reload Settings UI
+          widget.onRestoreSuccess?.call(); // Reload Home/Proxies UI
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Restore failed. Invalid backup file.")),
+          );
+        }
+      }
+    }
   }
 
   Future<void> _loadVersion() async {
@@ -120,6 +171,19 @@ class _SettingsTabState extends State<SettingsTab> {
                   _logLevel,
                   ["debug", "info", "error", "silent"],
                   (val) => setState(() => _logLevel = val!),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.cloud_download_outlined),
+                  title: const Text("Backup Configuration"),
+                  subtitle: const Text("Export all settings to ZIP"),
+                  onTap: _handleBackup,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.restore_page_outlined),
+                  title: const Text("Restore Configuration"),
+                  subtitle: const Text("Import settings from ZIP"),
+                  onTap: _handleRestore,
                 ),
                 const Divider(),
                 ListTile(

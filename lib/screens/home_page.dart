@@ -381,7 +381,8 @@ class _HomePageState extends State<HomePage> {
               },
             ),
             LogsTab(logs: _logs, scrollController: _logScrollCtrl),
-            SettingsTab(onCheckUpdate: () async {
+            SettingsTab(
+              onCheckUpdate: () async {
               ScaffoldMessenger.of(context).hideCurrentSnackBar();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text("Checking for updates...")),
@@ -393,7 +394,11 @@ class _HomePageState extends State<HomePage> {
                   const SnackBar(content: Text("You are using the latest version!")),
                 );
               }
-            }),
+            },
+            onRestoreSuccess: () {
+              _loadData(); // Refresh accounts and vpn state
+            },
+            ),
           ],
         ),
       ),
