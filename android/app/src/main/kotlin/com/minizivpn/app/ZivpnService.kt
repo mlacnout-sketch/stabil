@@ -75,16 +75,19 @@ class ZivpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d("ZIVPN-Service", "onStartCommand action: ${intent?.action}")
         if (intent?.action == ACTION_CONNECT) {
              startForegroundService()
         }
         
         when (intent?.action) {
             ACTION_CONNECT -> {
+                logToApp("Service Connecting...")
                 connect()
                 return START_STICKY
             }
             ACTION_DISCONNECT -> {
+                logToApp("Service Disconnecting...")
                 disconnect()
                 return START_NOT_STICKY
             }
@@ -127,76 +130,82 @@ class ZivpnService : VpnService() {
 
     private fun connect() {
         if (vpnInterface != null) return
+        logToApp("Initializing ZIVPN (BadVPN C engine)...")
 
-        Log.i("ZIVPN-Tun", "Initializing ZIVPN (BadVPN C engine)...")
-        
-        val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-        
-        val ip = prefs.getString("server_ip", "") ?: ""
-        val range = prefs.getString("server_range", "") ?: ""
-        val pass = prefs.getString("server_pass", "") ?: ""
-        val obfs = prefs.getString("server_obfs", "") ?: ""
-        val upMbps = prefs.getString("up_mbps", "15") ?: "15"
-        val downMbps = prefs.getString("down_mbps", "20") ?: "20"
-        val multiplier = prefs.getFloat("multiplier", 1.0f)
-        val mtu = prefs.getInt("mtu", 1500)
-        val logLevel = prefs.getString("log_level", "info") ?: "info"
-        val coreCount = prefs.getInt("core_count", 4)
-        val useWakelock = prefs.getBoolean("cpu_wakelock", false)
-
-        if (useWakelock) {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MiniZivpn::CoreWakelock")
-            wakeLock?.acquire()
-            logToApp("CPU Wakelock acquired")
-        }
-
-        // 1. START HYSTERIA & LOAD BALANCER
         try {
-            startPdnsd()
-            startCores(ip, range, pass, obfs, upMbps, downMbps, multiplier.toDouble(), coreCount, logLevel)
-        } catch (e: Exception) {
-            Log.e("ZIVPN-Tun", "Failed to start cores: ${e.message}")
-            stopSelf()
-            return
-        }
+            val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+            
+            val ip = prefs.getString("server_ip", "") ?: ""
+            val range = prefs.getString("server_range", "") ?: ""
+            val pass = prefs.getString("server_pass", "") ?: ""
+            val obfs = prefs.getString("server_obfs", "") ?: ""
+            val upMbps = prefs.getString("up_mbps", "15") ?: "15"
+            val downMbps = prefs.getString("down_mbps", "20") ?: "20"
+            val multiplier = prefs.getFloat("multiplier", 1.0f)
+            val mtu = prefs.getInt("mtu", 1500)
+            val logLevel = prefs.getString("log_level", "info") ?: "info"
+            val coreCount = prefs.getInt("core_count", 4)
+            val useWakelock = prefs.getBoolean("cpu_wakelock", false)
 
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // 2. Build VPN Interface
-        val builder = Builder()
-        builder.setSession("MiniZivpn")
-        builder.setConfigureIntent(pendingIntent)
-        builder.setMtu(mtu)
-        
-        // ZIVPN Style IP/Route
-        builder.addAddress("169.254.1.2", 24)
-        builder.addDnsServer("1.1.1.1")
-        builder.addDnsServer("8.8.8.8")
-        
-        try {
-            builder.addRoute("0.0.0.0", 0)
-        } catch (e: Exception) {
-            val subnets = listOf(
-                "0.0.0.0" to 1, "128.0.0.0" to 1
-            )
-            for ((addr, mask) in subnets) {
-                try { builder.addRoute(addr, mask) } catch (ex: Exception) {}
+            if (useWakelock) {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MiniZivpn::CoreWakelock")
+                wakeLock?.acquire()
+                logToApp("CPU Wakelock acquired")
             }
-        }
 
-        try {
-            builder.addDisallowedApplication(packageName)
-        } catch (e: Exception) {}
+            // 1. START HYSTERIA & LOAD BALANCER
+            try {
+                startPdnsd()
+                startCores(ip, range, pass, obfs, upMbps, downMbps, multiplier.toDouble(), coreCount, logLevel)
+            } catch (e: Exception) {
+                logToApp("Failed to start cores: ${e.message}")
+                stopSelf()
+                return
+            }
 
-        try {
+            val pendingIntent = PendingIntent.getActivity(
+                this, 0, Intent(this, MainActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            // 2. Build VPN Interface
+            val builder = Builder()
+            builder.setSession("MiniZivpn")
+            builder.setConfigureIntent(pendingIntent)
+            builder.setMtu(mtu)
+            
+            // ZIVPN Style IP/Route
+            builder.addAddress("169.254.1.2", 24)
+            builder.addDnsServer("1.1.1.1")
+            builder.addDnsServer("8.8.8.8")
+            
+            try {
+                builder.addRoute("0.0.0.0", 0)
+            } catch (e: Exception) {
+                val subnets = listOf(
+                    "0.0.0.0" to 1, "128.0.0.0" to 1
+                )
+                for ((addr, mask) in subnets) {
+                    try { builder.addRoute(addr, mask) } catch (ex: Exception) {}
+                }
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                try {
+                    builder.addDisallowedApplication(packageName)
+                } catch (e: Exception) {}
+            }
+
             vpnInterface = builder.establish()
-            val fd = vpnInterface?.fd ?: return
+            val fd = vpnInterface?.fd 
+            
+            if (fd == null) {
+                logToApp("Error: Failed to establish VPN interface (FD is null)")
+                return
+            }
 
-            Log.i("ZIVPN-Tun", "VPN Interface established. FD: $fd")
+            logToApp("VPN Interface established. FD: $fd")
 
             /**
              * BadVPN Tun2Socks Parameter Explanation:
@@ -211,7 +220,9 @@ class ZivpnService : VpnService() {
              * --dnsgw: DNS gateway address (169.254.1.1:8091, served by pdnsd).
              */
             val libDir = applicationInfo.nativeLibraryDir
-            val libTun = File(libDir, "libtun2socks.so").absolutePath
+            val libTunFile = File(libDir, "libtun2socks.so")
+            libTunFile.setExecutable(true)
+            val libTun = libTunFile.absolutePath
             val sockPath = File(filesDir, "sock_path").absolutePath
             
             val tunCmd = arrayListOf(
@@ -240,15 +251,18 @@ class ZivpnService : VpnService() {
             logToApp("BadVPN Engine Started successfully.")
             prefs.edit().putBoolean("flutter.vpn_running", true).apply()
 
-        } catch (e: Throwable) {
-            Log.e("ZIVPN-Tun", "Error starting VPN: ${e.message}")
+        } catch (e: Exception) {
+            logToApp("Critical Connect Error: ${e.message}")
+            Log.e("ZIVPN-Tun", "Connect Error", e)
             stopSelf()
         }
     }
 
     private fun startPdnsd() {
         val libDir = applicationInfo.nativeLibraryDir
-        val libPdnsd = File(libDir, "libpdnsd.so").absolutePath
+        val libPdnsdFile = File(libDir, "libpdnsd.so")
+        libPdnsdFile.setExecutable(true)
+        val libPdnsd = libPdnsdFile.absolutePath
         val confFile = File(filesDir, "pdnsd.conf")
         
         val confContent = """
@@ -293,8 +307,12 @@ class ZivpnService : VpnService() {
 
     private fun startCores(ip: String, range: String, pass: String, obfs: String, upMbps: String, downMbps: String, multiplier: Double, coreCount: Int, logLevel: String) {
         val libDir = applicationInfo.nativeLibraryDir
-        val libUz = File(libDir, "libuz.so").absolutePath
-        val libLoad = File(libDir, "libload.so").absolutePath
+        val libUzFile = File(libDir, "libuz.so")
+        val libLoadFile = File(libDir, "libload.so")
+        libUzFile.setExecutable(true)
+        libLoadFile.setExecutable(true)
+        val libUz = libUzFile.absolutePath
+        val libLoad = libLoadFile.absolutePath
         
         val baseConn = 131072
         val baseWin = 327680
