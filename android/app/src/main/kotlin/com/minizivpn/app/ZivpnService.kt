@@ -16,7 +16,6 @@ import android.content.pm.ServiceInfo
 import java.net.InetAddress
 import java.util.LinkedList
 import androidx.annotation.Keep
-import mobile.Mobile
 import java.io.File
 import org.json.JSONObject
 
@@ -43,14 +42,6 @@ class ZivpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private val processes = mutableListOf<Process>()
     private var wakeLock: PowerManager.WakeLock? = null
-
-    private val tunLogger = object : mobile.LogHandler {
-        override fun writeLog(message: String?) {
-            if (message != null) {
-                logToApp("[Tun2Socks] $message")
-            }
-        }
-    }
 
     private fun logToApp(msg: String) {
         val intent = Intent(ACTION_LOG)
@@ -217,7 +208,7 @@ class ZivpnService : VpnService() {
 
         builder.addDnsServer("1.1.1.1")
         builder.addDnsServer("8.8.8.8")
-        builder.addAddress("172.19.0.1", 30)
+        builder.addAddress("26.26.26.1", 24)
 
         try {
             vpnInterface = builder.establish()
@@ -225,24 +216,42 @@ class ZivpnService : VpnService() {
 
             Log.i("ZIVPN-Tun", "VPN Interface established. FD: $fd")
 
-            // 3. Start tun2socks (Go/gVisor Engine) via JNI
+            // 3. Start tun2socks (C Engine) via Process
             Thread {
                 try {
-                    val udpTimeout = 60000L
-                    val finalMtu = mtu.toLong()
-                    logToApp("Starting Engine: MTU=$finalMtu, Buf=$bufferSize, AutoTune=$autoTuning, Log=$logLevel, Wakelock=$useWakelock")
-                    mobile.Mobile.setLogHandler(tunLogger)
-                    mobile.Mobile.start(
-                        "socks5://127.0.0.1:7777",
-                        "fd://$fd",
-                        logLevel,
-                        finalMtu,
-                        udpTimeout,
-                        bufferSize, 
-                        bufferSize, 
-                        autoTuning
+                    val libDir = applicationInfo.nativeLibraryDir
+                    val tun2socks = File(libDir, "libtun2socks.so").absolutePath
+                    
+                    val tun2socksArgs = arrayListOf(
+                        tun2socks,
+                        "--netif-ipaddr", "26.26.26.2",
+                        "--netif-netmask", "255.255.255.0",
+                        "--socks-server-addr", "127.0.0.1:7777",
+                        "--tunfd", fd.toString(),
+                        "--tunmtu", mtu.toString(),
+                        "--loglevel", "3",
+                        "--enable-udprelay"
                     )
-                    logToApp("Tun2Socks Engine Started successfully.")
+
+                    logToApp("Starting Tun2Socks: $tun2socksArgs")
+
+                    val pb = ProcessBuilder(tun2socksArgs)
+                    val env = pb.environment()
+                    env["LD_LIBRARY_PATH"] = libDir
+                    pb.redirectErrorStream(true)
+                    
+                    val process = pb.start()
+                    processes.add(process)
+                    captureProcessLog(process, "tun2socks")
+
+                    // Send FD to tun2socks
+                    Thread.sleep(1000)
+                    if (NativeSystem.sendfd(fd) == 0) {
+                        logToApp("Tun2Socks FD sent successfully.")
+                    } else {
+                        logToApp("Failed to send FD to Tun2Socks.")
+                    }
+
                 } catch (e: Exception) {
                     logToApp("Engine Error: ${e.message}")
                 }
@@ -330,11 +339,13 @@ class ZivpnService : VpnService() {
         }
         wakeLock = null
         
+        /*
         try {
             mobile.Mobile.stop()
         } catch (e: Exception) {
             Log.e("ZIVPN-Tun", "Error stopping Mobile engine: ${e.message}")
         }
+        */
 
         processes.forEach { 
             try {

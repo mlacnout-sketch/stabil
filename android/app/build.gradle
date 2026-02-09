@@ -30,6 +30,12 @@ android {
         versionName flutter.versionName
     }
 
+    externalNativeBuild {
+        ndkBuild {
+            path 'src/main/jni/Android.mk'
+        }
+    }
+
     signingConfigs {
         release {
             def keystorePath = System.getenv("KEYSTORE_PATH")
