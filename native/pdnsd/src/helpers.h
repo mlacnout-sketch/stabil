@@ -273,7 +273,7 @@ inline static char *strndup(const char *s, size_t n)
 }
 #endif
 
-#ifndef HAVE_STPCPY
+#if !defined(HAVE_STPCPY) && !defined(__ANDROID__)
 inline static char *stpcpy (char *dest, const char *src)
   __attribute__((always_inline));
 inline static char *stpcpy (char *dest, const char *src)
