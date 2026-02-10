@@ -248,6 +248,9 @@ class ZivpnService : VpnService() {
                     val libDir = applicationInfo.nativeLibraryDir
                     val tun2socksBin = File(libDir, "libtun2socks.so").absolutePath
                     val finalMtu = mtu.toString()
+                    
+                    // Ensure executable permissions
+                    File(tun2socksBin).setExecutable(true)
 
                     val tsLogLevel = when (logLevel) {
                         "silent" -> "none"

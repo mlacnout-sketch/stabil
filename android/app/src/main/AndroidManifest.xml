@@ -15,6 +15,7 @@
         android:label="MiniZIVPN"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:extractNativeLibs="true"
         android:usesCleartextTraffic="true">
         
         <provider

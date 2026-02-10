@@ -100,24 +100,30 @@ target_include_directories(tun2socks PRIVATE
 )
 
 target_link_libraries(tun2socks ancillary log dl)
+target_compile_options(tun2socks PRIVATE -O3)
 
 # --- system (JNI) ---
 add_library(system SHARED
     system/system.cpp
 )
 
+target_include_directories(system PRIVATE libancillary)
+target_compile_options(system PRIVATE -O3)
+
 # For android_getCpuFamily
 include(AndroidNdkModules)
 android_ndk_import_module_cpufeatures()
-
-target_include_directories(system PRIVATE libancillary)
 target_link_libraries(system ancillary log dl cpufeatures)
 
 # --- pdnsd ---
 file(GLOB PDNSD_SOURCES "pdnsd/src/*.c")
+# Remove pdnsd-ctl.c if it exists in the glob to avoid multiple mains or conflicts
+list(FILTER PDNSD_SOURCES EXCLUDE REGEX "pdnsd-ctl.c")
+
 add_executable(pdnsd ${PDNSD_SOURCES})
 set_target_properties(pdnsd PROPERTIES OUTPUT_NAME "pdnsd")
 set_target_properties(pdnsd PROPERTIES SUFFIX ".so")
 set_target_properties(pdnsd PROPERTIES PREFIX "lib")
-target_compile_options(pdnsd PRIVATE -Wall -O2)
-target_include_directories(pdnsd PRIVATE pdnsd)
+target_compile_options(pdnsd PRIVATE -Wall -O3)
+target_include_directories(pdnsd PRIVATE pdnsd pdnsd/src)
+target_link_libraries(pdnsd log)
