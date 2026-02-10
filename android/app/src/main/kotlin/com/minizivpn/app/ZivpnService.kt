@@ -219,6 +219,12 @@ class ZivpnService : VpnService() {
             // 2.5 START PDNSD (Local DNS Cache)
             val pdnsdPort = 8053
             try {
+                // Ensure cache directory exists and is writable
+                val cacheDir = File(cacheDir, "pdnsd_cache")
+                if (!cacheDir.exists()) {
+                    cacheDir.mkdirs()
+                }
+                
                 // Use a default upstream or prefer one
                 val upstreamDns = "8.8.8.8" 
                 val pdnsdConf = Pdnsd.writeConfig(this, pdnsdPort, upstreamDns)

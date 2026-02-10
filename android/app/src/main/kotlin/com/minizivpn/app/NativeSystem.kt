@@ -1,5 +1,8 @@
 package com.minizivpn.app
 
+import androidx.annotation.Keep
+
+@Keep
 class NativeSystem {
     companion object {
         init {
