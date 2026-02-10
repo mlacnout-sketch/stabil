@@ -21,11 +21,6 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -38,24 +33,7 @@ jobs:
       - name: Install Android SDK & NDK
         run: |
           yes | sdkmanager --licenses
-          sdkmanager "platforms;android-36" "build-tools;35.0.0" "ndk;27.0.12077973"
-
-      - name: Install Gomobile
-        run: |
-          go install golang.org/x/mobile/cmd/gomobile@latest
-          go install golang.org/x/mobile/cmd/gobind@latest
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-
-      - name: Build Native Tunnel (tun2socks AAR)
-        working-directory: native/tun2socks
-        run: |
-          go get golang.org/x/mobile/bind
-          mkdir -p ../../android/app/libs
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973
-          gomobile init
-          # Explicitly target only arm64 to save build time and size
-          # -s: disable symbol table, -w: disable DWARF generation
-          gomobile bind -v -ldflags "-s -w" -target=android/arm64 -androidapi 24 -o ../../android/app/libs/tun2socks.aar ./mobile
+          sdkmanager "platforms;android-36" "build-tools;35.0.0" "ndk;27.0.12077973" cmake
 
       - name: Clean & Get Dependencies
         run: |
@@ -82,6 +60,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: flutter build apk --release --target-platform android-arm64
 
       - name: Upload Artifact
