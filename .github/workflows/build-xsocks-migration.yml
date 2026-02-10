@@ -1,0 +1,55 @@
+name: Build xSocks Migration
+
+on:
+  push:
+    branches: [ "feat/native-xsocks" ]
+  workflow_dispatch:
+
+jobs:
+  build-migration:
+    name: Compile Native xSocks & Build APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Java Environment
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Android Environment
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK & CMake
+        run: |
+          yes | sdkmanager --licenses
+          # Install NDK 27 and CMake 3.18+ (required for our build)
+          sdkmanager "platforms;android-36" "build-tools;35.0.0" "ndk;27.0.12077973" "cmake;3.18.1"
+
+      - name: Clean & Get Flutter Dependencies
+        run: |
+          flutter clean
+          flutter pub get
+
+      - name: Build Debug APK (Includes Native Compilation)
+        run: |
+          # This command triggers Gradle, which triggers CMake to build libtun2socks.so and libpdnsd.so
+          flutter build apk --debug --target-platform android-arm64 --verbose
+
+      - name: Upload xSocks APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiniZivpn-xSocks-Migration-Debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
