@@ -242,7 +242,7 @@ inline static int strncp(char *dst, const char *src, size_t dstsz)
 #endif
 }
 
-#ifndef HAVE_STRDUP
+#if !defined(HAVE_STRDUP) && !defined(__ANDROID__)
 inline static char *strdup(const char *s)
   __attribute__((always_inline));
 inline static char *strdup(const char *s)
@@ -255,7 +255,7 @@ inline static char *strdup(const char *s)
 }
 #endif
 
-#ifndef HAVE_STRNDUP
+#if !defined(HAVE_STRNDUP) && !defined(__ANDROID__)
 /* This version may allocate a buffer that is unnecessarily large,
    but I'm always going to use it with n<strlen(s)
 */
@@ -297,20 +297,20 @@ inline static void *mempcpy(void *dest, const void *src, size_t len)
 }
 #endif
 
-#ifndef HAVE_GETLINE
+#if !defined(HAVE_GETLINE) && !defined(__ANDROID__)
 int getline(char **lineptr, size_t *n, FILE *stream);
 #endif
 
-#ifndef HAVE_ASPRINTF
+#if !defined(HAVE_ASPRINTF) && !defined(__ANDROID__)
 int asprintf (char **lineptr, const char *format, ...);
 #endif
 
-#ifndef HAVE_VASPRINTF
+#if !defined(HAVE_VASPRINTF) && !defined(__ANDROID__)
 #include <stdarg.h>
 int vasprintf (char **lineptr, const char *format, va_list va);
 #endif
 
-#ifndef HAVE_INET_NTOP
+#if !defined(HAVE_INET_NTOP) && !defined(__ANDROID__)
 const char *inet_ntop(int af, const void *src, char *dst, size_t size);
 #endif
 
