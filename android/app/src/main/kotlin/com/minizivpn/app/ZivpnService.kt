@@ -218,7 +218,7 @@ class ZivpnService : VpnService() {
             Log.i("ZIVPN-Tun", "VPN Interface established. FD: $fd")
 
             // 2.5 START PDNSD (Local DNS Cache)
-            val pdnsdPort = 8053
+            val pdnsdPort = 8091
             try {
                 // Ensure cache directory exists and is writable
                 val cacheDir = File(cacheDir, "pdnsd_cache")
@@ -246,7 +246,7 @@ class ZivpnService : VpnService() {
                 
                 Thread.sleep(500) // Give it a moment
             } catch (e: Exception) {
-                logToApp("Pdnsd Start Error: ${e.message}")
+                logToApp("Pdnsd Error: ${e.message}")
             }
 
             // 3. Start tun2socks (Native C Engine) via ProcessBuilder
@@ -273,7 +273,7 @@ class ZivpnService : VpnService() {
                         "--socks-server-addr", "127.0.0.1:7777",
                         "--tunmtu", finalMtu,
                         "--loglevel", tsLogLevel,
-                        "--dnsgw", "127.0.0.1:$pdnsdPort", // Redirect UDP DNS to Pdnsd
+                        "--dnsgw", "169.254.1.1:$pdnsdPort", // Redirect UDP DNS to Pdnsd on Gateway IP
                         "--fake-proc"
                     )
                     

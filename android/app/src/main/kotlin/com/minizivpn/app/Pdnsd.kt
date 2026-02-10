@@ -5,24 +5,21 @@ import java.io.File
 
 object Pdnsd {
     fun getExecutable(context: Context): String {
-        // Android extracts native libs to nativeLibraryDir.
-        // We renamed pdnsd executable to libpdnsd.so in CMake.
         return File(context.applicationInfo.nativeLibraryDir, "libpdnsd.so").absolutePath
     }
 
     fun writeConfig(context: Context, listenPort: Int, upstreamIp: String): String {
-        val cacheDir = File(context.cacheDir, "pdnsd_cache")
+        val cacheDir = File(context.filesDir, "pdnsd_cache")
         if (!cacheDir.exists()) cacheDir.mkdirs()
         
         val configFile = File(context.filesDir, "pdnsd.conf")
         
-        // Configuration for non-root Android environment
-        // We use tcp_only query method to avoid UDP loops if tun2socks intercepts UDP DNS
+        // Final configuration optimized to match Zivpn production settings
         val conf = """
             global {
                 perm_cache=1024;
                 cache_dir="${cacheDir.absolutePath}";
-                server_ip = 127.0.0.1;
+                server_ip = 169.254.1.1;
                 server_port = $listenPort;
                 status_ctl = on;
                 query_method=tcp_only; 
@@ -34,10 +31,27 @@ object Pdnsd {
             }
 
             server {
-                label= "upstream";
-                ip = $upstreamIp;
+                label= "google-primary";
+                ip = 8.8.8.8;
+                port = 53;
                 uptest = none;
                 proxy_only=on;
+            }
+
+            server {
+                label= "google-secondary";
+                ip = 8.8.4.4;
+                port = 53;
+                uptest = none;
+                proxy_only=on;
+            }
+
+            rr {
+                name=localhost;
+                reverse=on;
+                a=127.0.0.1;
+                owner=localhost;
+                soa=localhost,root.localhost,42,86400,900,86400,86400;
             }
         """.trimIndent()
         
