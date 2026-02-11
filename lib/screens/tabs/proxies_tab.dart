@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../app_colors.dart';
+import '../../models/account.dart';
 
 class ProxiesTab extends StatefulWidget {
-  final List<Map<String, dynamic>> accounts;
+  final List<Account> accounts;
   final int activePingIndex;
   final Function(int) onActivate;
-  final Function(Map<String, dynamic>) onAdd;
-  final Function(int, Map<String, dynamic>) onEdit;
+  final Function(Account) onAdd;
+  final Function(int, Account) onEdit;
   final Function(int) onDelete;
 
   const ProxiesTab({
@@ -32,11 +33,11 @@ class _ProxiesTabState extends State<ProxiesTab> {
 
   void _showAccountDialog(BuildContext context, {int? index}) {
     final isEditing = index != null;
-    final Map<String, dynamic>? existingData = isEditing ? widget.accounts[index] : null;
+    final Account? existingData = isEditing ? widget.accounts[index] : null;
 
-    final nameCtrl = TextEditingController(text: existingData?['name'] ?? "");
-    final ipCtrl = TextEditingController(text: existingData?['ip'] ?? "");
-    final authCtrl = TextEditingController(text: existingData?['auth'] ?? "");
+    final nameCtrl = TextEditingController(text: existingData?.name ?? "");
+    final ipCtrl = TextEditingController(text: existingData?.ip ?? "");
+    final authCtrl = TextEditingController(text: existingData?.auth ?? "");
 
     showDialog(
       context: context,
@@ -90,13 +91,13 @@ class _ProxiesTabState extends State<ProxiesTab> {
                 return;
               }
 
-              final newData = {
-                "name": name,
-                "ip": ip,
-                "auth": pass,
-                "obfs": existingData?['obfs'] ?? "hu``hqb`c",
-                "usage": existingData?['usage'] ?? 0,
-              };
+              final newData = Account(
+                name: name,
+                ip: ip,
+                auth: pass,
+                obfs: existingData?.obfs ?? "hu``hqb`c",
+                usage: existingData?.usage ?? 0,
+              );
 
               if (isEditing) {
                 widget.onEdit(index, newData);
@@ -147,7 +148,7 @@ class _ProxiesTabState extends State<ProxiesTab> {
               itemBuilder: (context, index) {
                 final acc = widget.accounts[index];
                 final isSelected = index == widget.activePingIndex;
-                final usage = acc['usage'] ?? 0;
+                final usage = acc.usage;
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -169,14 +170,14 @@ class _ProxiesTabState extends State<ProxiesTab> {
                       ),
                     ),
                     title: Text(
-                      acc['name'] ?? "Unknown",
+                      acc.name.isEmpty ? "Unknown" : acc.name,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          acc['ip'] ?? "",
+                          acc.ip,
                           style: const TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                         const SizedBox(height: 6),

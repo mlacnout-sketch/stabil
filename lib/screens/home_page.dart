@@ -14,6 +14,7 @@ import 'tabs/settings_tab.dart';
 import '../viewmodels/update_viewmodel.dart';
 import '../repositories/backup_repository.dart';
 import '../models/app_version.dart';
+import '../models/account.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -36,7 +37,7 @@ class _HomePageState extends State<HomePage> {
   Timer? _logFlushTimer;
   final ScrollController _logScrollCtrl = ScrollController();
   
-  List<Map<String, dynamic>> _accounts = [];
+  List<Account> _accounts = [];
   int _activeAccountIndex = -1;
   
   Timer? _timer;
@@ -202,7 +203,8 @@ class _HomePageState extends State<HomePage> {
     final prefs = await SharedPreferences.getInstance();
     final String? jsonStr = prefs.getString('saved_accounts');
     if (jsonStr != null) {
-      _accounts = List<Map<String, dynamic>>.from(jsonDecode(jsonStr));
+      final List<dynamic> jsonData = jsonDecode(jsonStr);
+      _accounts = jsonData.map((acc) => Account.fromJson(acc)).toList();
     }
     
     final isRunning = prefs.getBool('vpn_running') ?? false;
@@ -227,7 +229,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _saveAccounts() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('saved_accounts', jsonEncode(_accounts));
+    await prefs.setString('saved_accounts', jsonEncode(_accounts.map((acc) => acc.toJson()).toList()));
   }
 
   void _startTimer() {
@@ -288,8 +290,7 @@ class _HomePageState extends State<HomePage> {
           _sessionTx.value += tx;
 
           if (_activeAccountIndex != -1) {
-            _accounts[_activeAccountIndex]['usage'] =
-                (_accounts[_activeAccountIndex]['usage'] ?? 0) + rx + tx;
+            _accounts[_activeAccountIndex].usage += rx + tx;
           }
         }
       }
@@ -389,9 +390,9 @@ class _HomePageState extends State<HomePage> {
     final account = _accounts[index];
     final prefs = await SharedPreferences.getInstance();
 
-    await prefs.setString('ip', account['ip']);
-    await prefs.setString('auth', account['auth']);
-    await prefs.setString('obfs', account['obfs']);
+    await prefs.setString('ip', account.ip);
+    await prefs.setString('auth', account.auth);
+    await prefs.setString('obfs', account.obfs);
     await prefs.setInt('active_account_index', index);
 
     setState(() {
