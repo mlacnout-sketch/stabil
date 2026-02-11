@@ -561,10 +561,18 @@ static int add_rrset(dns_msg_t **ans, size_t *sz, size_t *allocsz,
 		rr_bucket_t *b;
 		rr_bucket_t *first=NULL; /* Initialized to inhibit compiler warning */
 		int i;
+		int ar_idx = -1;
 		short rnd_recs=global.rnd_recs;
 
 		b=crrset->rrs;
 		if (rnd_recs) b=first=randrr(crrset->rrs);
+
+		for (i=0;i<AR_NUM;i++) {
+			if (ar_recs[i]==tp) {
+				ar_idx = i;
+				break;
+			}
+		}
 
 		while (b) {
 			if (!add_rr(ans, sz, allocsz, rrn, tp, ans_ttl(crrset,queryts),
@@ -575,14 +583,11 @@ static int add_rrset(dns_msg_t **ans, size_t *sz, size_t *allocsz,
 				if (!sva_add(sva,rrn,tp,b->rdlen,b->data))
 					return 0;
 			}
-			/* Mark for additional address records. XXX: this should be a more effective algorithm; at least the list is small */
-			for (i=0;i<AR_NUM;i++) {
-				if (ar_recs[i]==tp) {
-					if (!add_ar(ar, RRETP_ADD,b->rdlen-ar_offs[i],((unsigned char *)(b->data))+ar_offs[i],
-						    ucharp "", 0))
-						return 0;
-					break;
-				}
+			/* Mark for additional address records. */
+			if (ar_idx != -1) {
+				if (!add_ar(ar, RRETP_ADD,b->rdlen-ar_offs[ar_idx],((unsigned char *)(b->data))+ar_offs[ar_idx],
+						ucharp "", 0))
+					return 0;
 			}
 			b=b->next;
 			if (rnd_recs) {

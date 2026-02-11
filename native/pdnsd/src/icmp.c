@@ -38,6 +38,7 @@
 #include <errno.h>
 #include <string.h>
 #include "ipvers.h"
+#include "error.h"
 #if (TARGET==TARGET_LINUX)
 # include <netinet/ip.h>
 # include <linux/types.h>
@@ -60,7 +61,6 @@
 #endif
 #include <netdb.h>
 #include "icmp.h"
-#include "error.h"
 #include "helpers.h"
 #include "servers.h"
 
