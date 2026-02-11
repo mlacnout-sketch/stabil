@@ -130,6 +130,13 @@ class MainActivity: FlutterActivity() {
                 val enableUdpgw = call.argument<Boolean>("enable_udpgw") ?: true
                 val udpgwMode = call.argument<String>("udpgw_mode") ?: "relay"
                 val udpgwPort = call.argument<String>("udpgw_port") ?: "7300"
+                val pingInterval = call.argument<Int>("ping_interval") ?: 3
+                val pingTarget = call.argument<String>("ping_target") ?: "http://www.gstatic.com/generate_204"
+                
+                // Apps Filter
+                val filterApps = call.argument<Boolean>("filter_apps") ?: false
+                val bypassMode = call.argument<Boolean>("bypass_mode") ?: false
+                val appsList = call.argument<String>("apps_list") ?: ""
                 
                 // Advanced Settings
                 val mtu = call.argument<Int>("mtu") ?: 1500
@@ -151,6 +158,11 @@ class MainActivity: FlutterActivity() {
                     .putBoolean("enable_udpgw", enableUdpgw)
                     .putString("udpgw_mode", udpgwMode)
                     .putString("udpgw_port", udpgwPort)
+                    .putInt("ping_interval", pingInterval)
+                    .putString("ping_target", pingTarget)
+                    .putBoolean("filter_apps", filterApps)
+                    .putBoolean("bypass_mode", bypassMode)
+                    .putString("apps_list", appsList)
                     .putInt("mtu", mtu)
                     .putBoolean("auto_tuning", autoTuning)
                     .putString("buffer_size", bufferSize)
@@ -166,6 +178,30 @@ class MainActivity: FlutterActivity() {
                 result.success("Stopped")
             } else if (call.method == "startVpn") {
                 startVpn(result)
+            } else if (call.method == "getInstalledApps") {
+                Thread {
+                    val apps = mutableListOf<Map<String, String>>()
+                    val pm = packageManager
+                    val packages = pm.getInstalledPackages(0)
+                    for (pkg in packages) {
+                        // Skip system apps if needed, but let's include all for now
+                        val appInfo = pkg.applicationInfo
+                        val label = pm.getApplicationLabel(appInfo).toString()
+                        val packageName = pkg.packageName
+                        
+                        val appMap = mapOf(
+                            "name" to label,
+                            "package" to packageName
+                        )
+                        apps.add(appMap)
+                    }
+                    // Sort by name
+                    apps.sortBy { it["name"]?.lowercase() }
+                    
+                    uiHandler.post {
+                        result.success(apps)
+                    }
+                }.start()
             } else {
                 result.notImplemented()
             }

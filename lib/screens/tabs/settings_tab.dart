@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 import '../../app_colors.dart';
 import '../../repositories/backup_repository.dart';
+import '../app_selector_page.dart';
 
 class SettingsTab extends StatefulWidget {
   final VoidCallback onCheckUpdate;
@@ -24,12 +25,16 @@ class SettingsTab extends StatefulWidget {
 class _SettingsTabState extends State<SettingsTab> {
   final _mtuCtrl = TextEditingController();
   final _pingTargetCtrl = TextEditingController();
+  final _pingIntervalCtrl = TextEditingController();
   final _udpgwPortCtrl = TextEditingController();
   final _dnsCtrl = TextEditingController();
+  final _appsListCtrl = TextEditingController();
 
   bool _autoTuning = true;
   bool _cpuWakelock = false;
   bool _enableUdpgw = true;
+  bool _filterApps = false;
+  bool _bypassMode = false;
   String _udpgwMode = "relay";
   String _bufferSize = "4m";
   String _logLevel = "info";
@@ -42,6 +47,27 @@ class _SettingsTabState extends State<SettingsTab> {
     super.initState();
     _loadSettings();
     _loadVersion();
+  }
+
+  Future<void> _openAppSelector() async {
+    final currentList = _appsListCtrl.text
+        .split("\n")
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    final result = await Navigator.push<List<String>>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AppSelectorPage(initialSelected: currentList),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _appsListCtrl.text = result.join("\n");
+      });
+    }
   }
 
   Future<void> _handleBackup() async {
@@ -95,11 +121,15 @@ class _SettingsTabState extends State<SettingsTab> {
     setState(() {
       _mtuCtrl.text = prefs.getString('mtu') ?? "1200";
       _pingTargetCtrl.text = prefs.getString('ping_target') ?? "http://www.gstatic.com/generate_204";
+      _pingIntervalCtrl.text = prefs.getString('ping_interval') ?? "3";
       _udpgwPortCtrl.text = prefs.getString('udpgw_port') ?? "7300";
       _dnsCtrl.text = prefs.getString('upstream_dns') ?? "208.67.222.222";
+      _appsListCtrl.text = prefs.getString('apps_list') ?? "";
       _autoTuning = prefs.getBool('auto_tuning') ?? true;
       _cpuWakelock = prefs.getBool('cpu_wakelock') ?? false;
       _enableUdpgw = prefs.getBool('enable_udpgw') ?? true;
+      _filterApps = prefs.getBool('filter_apps') ?? false;
+      _bypassMode = prefs.getBool('bypass_mode') ?? false;
       _udpgwMode = prefs.getString('udpgw_mode') ?? "relay";
       _bufferSize = prefs.getString('buffer_size') ?? "4m";
       _logLevel = prefs.getString('log_level') ?? "info";
@@ -111,11 +141,15 @@ class _SettingsTabState extends State<SettingsTab> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('mtu', _mtuCtrl.text);
     await prefs.setString('ping_target', _pingTargetCtrl.text);
+    await prefs.setString('ping_interval', _pingIntervalCtrl.text);
     await prefs.setString('udpgw_port', _udpgwPortCtrl.text);
     await prefs.setString('upstream_dns', _dnsCtrl.text);
+    await prefs.setString('apps_list', _appsListCtrl.text);
     await prefs.setBool('auto_tuning', _autoTuning);
     await prefs.setBool('cpu_wakelock', _cpuWakelock);
     await prefs.setBool('enable_udpgw', _enableUdpgw);
+    await prefs.setBool('filter_apps', _filterApps);
+    await prefs.setBool('bypass_mode', _bypassMode);
     await prefs.setString('udpgw_mode', _udpgwMode);
     await prefs.setString('buffer_size', _bufferSize);
     await prefs.setString('log_level', _logLevel);
@@ -148,31 +182,13 @@ class _SettingsTabState extends State<SettingsTab> {
                   "MTU (Default: 1500)",
                   Icons.settings_ethernet,
                 ),
-                const SizedBox(height: 16),
-                _buildTextInput(
-                  _pingTargetCtrl,
-                  "Ping Destination (URL/IP)",
-                  Icons.network_check,
-                ),
-                const SizedBox(height: 20),
-                _buildSliderSection(),
                 const Divider(),
-                SwitchListTile(
-                  title: const Text("CPU Wakelock"),
-                  subtitle: const Text("Prevent CPU sleep (High Battery Usage)"),
-                  value: _cpuWakelock,
-                  onChanged: (val) => setState(() => _cpuWakelock = val),
+                const ListTile(
+                  title: Text("UDP Forwarding", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
                 ),
                 SwitchListTile(
-                  title: const Text("TCP Auto Tuning"),
-                  subtitle: const Text("Dynamic buffer sizing for stability"),
-                  value: _autoTuning,
-                  onChanged: (val) => setState(() => _autoTuning = val),
-                ),
-                const Divider(),
-                SwitchListTile(
-                  title: const Text("Enable UDPGW"),
-                  subtitle: const Text("Allow UDP traffic (Gaming/VOIP)"),
+                  title: const Text("Forward UDP"),
+                  subtitle: const Text("If active, redirects requests to the remote server."),
                   value: _enableUdpgw,
                   onChanged: (val) => setState(() => _enableUdpgw = val),
                 ),
@@ -190,12 +206,85 @@ class _SettingsTabState extends State<SettingsTab> {
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         child: _buildTextInput(
                           _udpgwPortCtrl,
-                          "UDPGW Port (Default: 7300)",
+                          "Udp Gateway (Remote)",
                           Icons.door_sliding,
                         ),
                       ),
                     ],
                   ),
+                const Divider(),
+                const ListTile(
+                  title: Text("Ping", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: _buildTextInput(
+                    _pingIntervalCtrl,
+                    "Ping(sec, ex. 3) | To disable use 0",
+                    Icons.timer,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: _buildTextInput(
+                    _pingTargetCtrl,
+                    "Destination Ping (URL/IP)",
+                    Icons.network_check,
+                  ),
+                ),
+                const Divider(),
+                const ListTile(
+                  title: Text("Apps Filter", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+                ),
+                SwitchListTile(
+                  title: const Text("Filter Apps"),
+                  value: _filterApps,
+                  onChanged: (val) => setState(() => _filterApps = val),
+                ),
+                SwitchListTile(
+                  title: const Text("Bypass Mode"),
+                  subtitle: const Text("If enabled, selected apps will bypass VPN."),
+                  value: _bypassMode,
+                  onChanged: (val) => setState(() => _bypassMode = val),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.apps),
+                  title: const Text("Select Apps"),
+                  subtitle: const Text("Choose apps to include or exclude"),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: _openAppSelector,
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: TextField(
+                    controller: _appsListCtrl,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      labelText: "Apps List (Package names, one per line)",
+                      prefixIcon: const Icon(Icons.list),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: AppColors.card,
+                    ),
+                  ),
+                ),
+                const Divider(),
+                const ListTile(
+                  title: Text("Advanced", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+                ),
+                _buildSliderSection(),
+                SwitchListTile(
+                  title: const Text("CPU Wakelock"),
+                  subtitle: const Text("Prevent CPU sleep (High Battery Usage)"),
+                  value: _cpuWakelock,
+                  onChanged: (val) => setState(() => _cpuWakelock = val),
+                ),
+                SwitchListTile(
+                  title: const Text("TCP Auto Tuning"),
+                  subtitle: const Text("Dynamic buffer sizing for stability"),
+                  value: _autoTuning,
+                  onChanged: (val) => setState(() => _autoTuning = val),
+                ),
                 const Divider(),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

@@ -1,0 +1,117 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../app_colors.dart';
+
+class AppSelectorPage extends StatefulWidget {
+  final List<String> initialSelected;
+
+  const AppSelectorPage({super.key, required this.initialSelected});
+
+  @override
+  State<AppSelectorPage> createState() => _AppSelectorPageState();
+}
+
+class _AppSelectorPageState extends State<AppSelectorPage> {
+  static const platform = MethodChannel('com.minizivpn.app/core');
+  
+  List<Map<String, String>> _allApps = [];
+  List<Map<String, String>> _filteredApps = [];
+  final Set<String> _selectedPackages = {};
+  bool _isLoading = true;
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedPackages.addAll(widget.initialSelected);
+    _loadApps();
+    _searchCtrl.addListener(_filterApps);
+  }
+
+  Future<void> _loadApps() async {
+    try {
+      final List<dynamic> apps = await platform.invokeMethod('getInstalledApps');
+      if (mounted) {
+        setState(() {
+          _allApps = apps.map((e) => Map<String, String>.from(e)).toList();
+          _filteredApps = _allApps;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to load apps: $e")),
+        );
+      }
+    }
+  }
+
+  void _filterApps() {
+    final query = _searchCtrl.text.toLowerCase();
+    setState(() {
+      _filteredApps = _allApps.where((app) {
+        return app['name']!.toLowerCase().contains(query) ||
+               app['package']!.toLowerCase().contains(query);
+      }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Select Apps"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.check),
+            onPressed: () => Navigator.pop(context, _selectedPackages.toList()),
+          )
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(60),
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: TextField(
+              controller: _searchCtrl,
+              decoration: InputDecoration(
+                hintText: "Search apps...",
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                filled: true,
+                fillColor: AppColors.card,
+              ),
+            ),
+          ),
+        ),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              itemCount: _filteredApps.length,
+              itemBuilder: (context, index) {
+                final app = _filteredApps[index];
+                final pkg = app['package']!;
+                final isSelected = _selectedPackages.contains(pkg);
+
+                return CheckboxListTile(
+                  title: Text(app['name']!),
+                  subtitle: Text(pkg, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                  value: isSelected,
+                  activeColor: AppColors.primary,
+                  onChanged: (val) {
+                    setState(() {
+                      if (val == true) {
+                        _selectedPackages.add(pkg);
+                      } else {
+                        _selectedPackages.remove(pkg);
+                      }
+                    });
+                  },
+                );
+              },
+            ),
+    );
+  }
+}

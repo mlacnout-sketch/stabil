@@ -43,6 +43,7 @@ class ZivpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private val processes = mutableListOf<Process>()
     private var wakeLock: PowerManager.WakeLock? = null
+    private var pingTimer: java.util.Timer? = null
 
     private fun logToApp(msg: String) {
         val intent = Intent(ACTION_LOG)
@@ -217,6 +218,27 @@ class ZivpnService : VpnService() {
             builder.addDisallowedApplication(packageName)
         } catch (e: Exception) {}
 
+        // Apps Filter Logic
+        val filterApps = prefs.getBoolean("filter_apps", false)
+        val bypassMode = prefs.getBoolean("bypass_mode", false)
+        val appsList = prefs.getString("apps_list", "") ?: ""
+
+        if (filterApps && appsList.isNotEmpty()) {
+            val appPackages = appsList.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+            for (pkg in appPackages) {
+                try {
+                    if (bypassMode) {
+                        builder.addDisallowedApplication(pkg)
+                    } else {
+                        builder.addAllowedApplication(pkg)
+                    }
+                } catch (e: Exception) {
+                    logToApp("Apps Filter: Failed to add $pkg (Not found or invalid)")
+                }
+            }
+            logToApp("Apps Filter: Applied to ${appPackages.size} apps (Bypass: $bypassMode)")
+        }
+
         // Virtual DNS setup (Zivpn Standard)
         builder.addDnsServer("169.254.1.2")
         builder.addAddress("169.254.1.1", 24)
@@ -330,6 +352,14 @@ class ZivpnService : VpnService() {
                     } else {
                          logToApp("Tun2Socks Engine Running.")
                          prefs.edit().putBoolean("flutter.vpn_running", true).apply()
+                         
+                         // 4. Start Auto-Ping
+                         val pingInterval = prefs.getInt("ping_interval", 3)
+                         val pingTarget = prefs.getString("ping_target", "http://www.gstatic.com/generate_204") ?: "http://www.gstatic.com/generate_204"
+                         
+                         if (pingInterval > 0) {
+                             startPingTimer(pingTarget, pingInterval)
+                         }
                     }
 
                 } catch (e: Exception) {
@@ -412,6 +442,8 @@ class ZivpnService : VpnService() {
     private fun disconnect() {
         Log.i("ZIVPN-Tun", "Stopping VPN and cores...")
         
+        stopPingTimer()
+
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
             logToApp("CPU Wakelock released")
@@ -448,6 +480,34 @@ class ZivpnService : VpnService() {
         
         stopForeground(true)
         stopSelf()
+    }
+
+    private fun startPingTimer(target: String, intervalSeconds: Int) {
+        stopPingTimer()
+        pingTimer = java.util.Timer()
+        val intervalMillis = (intervalSeconds * 1000).toLong()
+        
+        pingTimer?.schedule(object : java.util.TimerTask() {
+            override fun run() {
+                try {
+                    val url = java.net.URL(target)
+                    val conn = url.openConnection() as java.net.HttpURLConnection
+                    conn.connectTimeout = 5000
+                    conn.readTimeout = 5000
+                    conn.requestMethod = "GET"
+                    val responseCode = conn.responseCode
+                    Log.d("ZIVPN-Ping", "Auto-Ping to $target: $responseCode")
+                } catch (e: Exception) {
+                    Log.e("ZIVPN-Ping", "Auto-Ping failed: ${e.message}")
+                }
+            }
+        }, intervalMillis, intervalMillis)
+        logToApp("Auto-Ping started every $intervalSeconds seconds to $target")
+    }
+
+    private fun stopPingTimer() {
+        pingTimer?.cancel()
+        pingTimer = null
     }
 
     override fun onDestroy() {
