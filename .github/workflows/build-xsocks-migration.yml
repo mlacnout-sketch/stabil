@@ -56,6 +56,9 @@ jobs:
           flutter clean
           flutter pub get
 
+      - name: Flutter Analyze (Best Practice Check)
+        run: flutter analyze
+
       - name: Decode Signing Keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
