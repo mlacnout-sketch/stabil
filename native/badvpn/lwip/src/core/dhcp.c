@@ -1686,8 +1686,7 @@ dhcp_create_msg(struct netif *netif, struct dhcp *dhcp, u8_t message_type)
   dhcp->msg_out = (struct dhcp_msg *)dhcp->p_out->payload;
 
   dhcp->msg_out->op = DHCP_BOOTREQUEST;
-  /* TODO: make link layer independent */
-  dhcp->msg_out->htype = DHCP_HTYPE_ETH;
+  dhcp->msg_out->htype = ((netif->hwtype != 0) ? netif->hwtype : DHCP_HTYPE_ETH);
   dhcp->msg_out->hlen = netif->hwaddr_len;
   dhcp->msg_out->hops = 0;
   dhcp->msg_out->xid = htonl(dhcp->xid);
