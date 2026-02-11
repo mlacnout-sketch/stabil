@@ -235,6 +235,8 @@ struct netif {
   u16_t mtu;
   /** number of bytes used in hwaddr */
   u8_t hwaddr_len;
+  /** link level hardware type of this interface */
+  u8_t hwtype;
   /** link level hardware address of this interface */
   u8_t hwaddr[NETIF_MAX_HWADDR_LEN];
   /** flags (see NETIF_FLAG_ above) */
