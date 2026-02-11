@@ -254,14 +254,10 @@ class ZivpnService : VpnService() {
             )
             
             if (useUdpgw) {
-                // Gunakan argumen --udpgw-remote-server-addr untuk mode standard
-                // dan --enable-udprelay untuk mode relay (jika masih diinginkan)
-                if (udpgwMode == "standard") {
-                    tunCmd.add("--udpgw-remote-server-addr"); tunCmd.add("127.0.0.1:$udpgwPort")
-                } else { // Ini akan mencakup mode "relay" atau mode lain yang tidak "standard"
-                    tunCmd.add("--enable-udprelay")
-                }
-                tunCmd.add("--udprelay-max-connections"); tunCmd.add("512")
+                // Enforce standard UDPGW mode for all configurations
+                // This aligns with the removal of Android-specific "relay" mode in native code
+                tunCmd.add("--udpgw-remote-server-addr"); tunCmd.add("127.0.0.1:$udpgwPort")
+                tunCmd.add("--udpgw-max-connections"); tunCmd.add("512")
             }
 
             val tunProc = ProcessBuilder(tunCmd).directory(filesDir).start()
