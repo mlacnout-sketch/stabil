@@ -18,6 +18,10 @@ import android.content.IntentFilter
 import android.net.TrafficStats
 import java.util.Timer
 import java.util.TimerTask
+import androidx.core.content.ContextCompat
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
 
 /**
  * ZIVPN Turbo Main Activity
@@ -29,6 +33,7 @@ class MainActivity: FlutterActivity() {
     private val STATS_CHANNEL = "com.minizivpn.app/stats" // New Channel
     private val ACTION_LOG = "com.minizivpn.app.LOG"
     private val REQUEST_VPN_CODE = 1
+    private val REQUEST_NOTIFICATION_PERMISSION_CODE = 2
     
     private var logSink: EventChannel.EventSink? = null
     private var statsSink: EventChannel.EventSink? = null
@@ -52,6 +57,15 @@ class MainActivity: FlutterActivity() {
         // Ensure environment is clean on launch
         stopEngine()
         registerReceiver(logReceiver, IntentFilter(ACTION_LOG))
+        checkAndRequestNotificationPermission()
+    }
+
+    private fun checkAndRequestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATION_PERMISSION_CODE)
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -257,7 +271,7 @@ class MainActivity: FlutterActivity() {
         } else {
             val serviceIntent = Intent(this, ZivpnService::class.java)
             serviceIntent.action = ZivpnService.ACTION_CONNECT
-            startService(serviceIntent)
+            ContextCompat.startForegroundService(this, serviceIntent)
             result.success("STARTED")
             sendToLog("VPN Service started.")
         }
@@ -276,7 +290,7 @@ class MainActivity: FlutterActivity() {
             if (resultCode == RESULT_OK) {
                 val serviceIntent = Intent(this, ZivpnService::class.java)
                 serviceIntent.action = ZivpnService.ACTION_CONNECT
-                startService(serviceIntent)
+                ContextCompat.startForegroundService(this, serviceIntent)
                 sendToLog("VPN permission granted. Starting service.")
             } else {
                 sendToLog("VPN permission denied.")

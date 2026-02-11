@@ -77,10 +77,9 @@ class ZivpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_CONNECT) {
-             startForegroundService()
-        }
-        
+        // ALWAYS call startForeground as early as possible on Android 8.0+
+        startForegroundService()
+
         when (intent?.action) {
             ACTION_CONNECT -> {
                 connect()
@@ -116,11 +115,10 @@ class ZivpnService : VpnService() {
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
         if (Build.VERSION.SDK_INT >= 34) {
-             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
              startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
              startForeground(NOTIFICATION_ID, notification)
