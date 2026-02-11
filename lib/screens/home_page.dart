@@ -30,9 +30,11 @@ class _HomePageState extends State<HomePage> {
   static const platform = MethodChannel('com.minizivpn.app/core');
   static const logChannel = EventChannel('com.minizivpn.app/logs');
   static const statsChannel = EventChannel('com.minizivpn.app/stats');
+  static const pingChannel = EventChannel('com.minizivpn.app/ping');
 
   String _vpnState = "disconnected"; // disconnected, connecting, connected
   final List<String> _logs = [];
+  final List<String> _pingLogs = [];
   final List<String> _logBuffer = [];
   Timer? _logFlushTimer;
   final ScrollController _logScrollCtrl = ScrollController();
@@ -56,6 +58,7 @@ class _HomePageState extends State<HomePage> {
     _loadData();
     _initLogListener();
     _initStatsListener();
+    _initPingListener();
     _checkInitialImport();
     
     // Auto-update check
@@ -65,6 +68,25 @@ class _HomePageState extends State<HomePage> {
       }
     });
     _updateViewModel.checkForUpdate();
+  }
+
+  void _initPingListener() {
+    pingChannel.receiveBroadcastStream().listen((event) {
+      if (event is String && mounted) {
+        // Format: target|code|duration
+        final parts = event.split('|');
+        if (parts.length == 3) {
+            final target = parts[0];
+            final code = parts[1];
+            final duration = parts[2];
+            final timestamp = DateTime.now().toString().split('.')[0];
+            setState(() {
+                _pingLogs.insert(0, "$timestamp | $target | Status: $code | ${duration}ms");
+                if (_pingLogs.length > 50) _pingLogs.removeLast();
+            });
+        }
+      }
+    });
   }
 
   @override
@@ -457,6 +479,7 @@ class _HomePageState extends State<HomePage> {
             ),
             LogsTab(logs: _logs, scrollController: _logScrollCtrl),
             SettingsTab(
+              pingLogs: _pingLogs,
               onCheckUpdate: () async {
               ScaffoldMessenger.of(context).hideCurrentSnackBar();
               ScaffoldMessenger.of(context).showSnackBar(
