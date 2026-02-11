@@ -37,6 +37,7 @@ class ZivpnService : VpnService() {
         const val ACTION_CONNECT = "com.minizivpn.app.CONNECT"
         const val ACTION_DISCONNECT = "com.minizivpn.app.DISCONNECT"
         const val ACTION_LOG = "com.minizivpn.app.LOG"
+        const val ACTION_PING = "com.minizivpn.app.PING"
         const val CHANNEL_ID = "ZIVPN_SERVICE_CHANNEL"
         const val NOTIFICATION_ID = 1
     }
@@ -51,6 +52,14 @@ class ZivpnService : VpnService() {
         intent.putExtra("message", msg)
         sendBroadcast(intent)
         Log.d("ZIVPN-Core", msg)
+    }
+
+    private fun broadcastPing(target: String, code: Int, duration: Long) {
+        val intent = Intent(ACTION_PING)
+        intent.putExtra("target", target)
+        intent.putExtra("code", code)
+        intent.putExtra("duration", duration)
+        sendBroadcast(intent)
     }
 
     private fun captureProcessLog(process: Process, name: String) {
@@ -392,6 +401,7 @@ class ZivpnService : VpnService() {
         
         pingTimer?.schedule(object : java.util.TimerTask() {
             override fun run() {
+                val start = System.currentTimeMillis()
                 try {
                     val url = java.net.URL(target)
                     val conn = url.openConnection() as java.net.HttpURLConnection
@@ -399,8 +409,12 @@ class ZivpnService : VpnService() {
                     conn.readTimeout = 5000
                     conn.requestMethod = "GET"
                     val responseCode = conn.responseCode
-                    Log.d("ZIVPN-Ping", "Auto-Ping to $target: $responseCode")
+                    val duration = System.currentTimeMillis() - start
+                    broadcastPing(target, responseCode, duration)
+                    Log.d("ZIVPN-Ping", "Auto-Ping to $target: $responseCode (${duration}ms)")
                 } catch (e: Exception) {
+                    val duration = System.currentTimeMillis() - start
+                    broadcastPing(target, -1, duration)
                     Log.e("ZIVPN-Ping", "Auto-Ping failed: ${e.message}")
                 }
             }
