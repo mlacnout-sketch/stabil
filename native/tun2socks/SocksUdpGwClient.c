@@ -28,17 +28,13 @@
 
 #include <misc/debug.h>
 #include <base/BLog.h>
+#include <misc/socks_proto.h>
 
 #include <tun2socks/SocksUdpGwClient.h>
 
 #include <generated/blog_channel_SocksUdpGwClient.h>
 
-#ifdef ANDROID
-
-#include <misc/socks_proto.h>
 #define CONNECTION_UDP_BUFFER_SIZE 1
-
-#else
 
 static void free_socks (SocksUdpGwClient *o);
 static void try_connect (SocksUdpGwClient *o);
@@ -47,9 +43,6 @@ static void socks_client_handler (SocksUdpGwClient *o, int event);
 static void udpgw_handler_servererror (SocksUdpGwClient *o);
 static void udpgw_handler_received (SocksUdpGwClient *o, BAddr local_addr, BAddr remote_addr, const uint8_t *data, int data_len);
 
-#endif
-
-#ifdef ANDROID
 static void dgram_handler (SocksUdpGwClient_connection *o, int event);
 static void dgram_handler_received (SocksUdpGwClient_connection *o, uint8_t *data, int data_len);
 static int conaddr_comparator (void *unused, SocksUdpGwClient_conaddr *v1, SocksUdpGwClient_conaddr *v2);
@@ -356,8 +349,6 @@ static void connection_free (SocksUdpGwClient_connection *o)
     free(o);
 }
 
-#else
-
 static void free_socks (SocksUdpGwClient *o)
 {
     ASSERT(o->have_socks)
@@ -476,8 +467,6 @@ static void udpgw_handler_received (SocksUdpGwClient *o, BAddr local_addr, BAddr
     return;
 }
 
-#endif
-
 int SocksUdpGwClient_Init (SocksUdpGwClient *o, int udp_mtu, int max_connections, int send_buffer_size, btime_t keepalive_time,
                            BAddr socks_server_addr, const struct BSocksClient_auth_info *auth_info, size_t num_auth_info,
                            BAddr remote_udpgw_addr, btime_t reconnect_time, BReactor *reactor, void *user,
@@ -485,9 +474,6 @@ int SocksUdpGwClient_Init (SocksUdpGwClient *o, int udp_mtu, int max_connections
 {
     // see asserts in UdpGwClient_Init
     ASSERT(!BAddr_IsInvalid(&socks_server_addr))
-#ifndef ANDROID
-    ASSERT(remote_udpgw_addr.type == BADDR_TYPE_IPV4 || remote_udpgw_addr.type == BADDR_TYPE_IPV6)
-#endif
     
     // init arguments
     o->udp_mtu = udp_mtu;
@@ -499,39 +485,33 @@ int SocksUdpGwClient_Init (SocksUdpGwClient *o, int udp_mtu, int max_connections
     o->user = user;
     o->handler_received = handler_received;
     
-#ifdef ANDROID
-    // compute MTUs
-    o->udpgw_mtu = udpgw_compute_mtu(o->udp_mtu);
-    o->max_connections = max_connections;
+    // Determine mode: Relay if address is 0.0.0.0:0, Standard otherwise
+    o->use_relay = BAddr_IsAny(&remote_udpgw_addr);
     
-    // limit max connections to number of conid's
-    if (o->max_connections > UINT16_MAX + 1) {
-        o->max_connections = UINT16_MAX + 1;
+    if (o->use_relay) {
+        // Relay mode (Android-style)
+        o->udpgw_mtu = udpgw_compute_mtu(o->udp_mtu);
+        o->max_connections = max_connections;
+        
+        if (o->max_connections > UINT16_MAX + 1) {
+            o->max_connections = UINT16_MAX + 1;
+        }
+        
+        BAVL_Init(&o->connections_tree, OFFSET_DIFF(SocksUdpGwClient_connection, conaddr, connections_tree_node), (BAVL_comparator)conaddr_comparator, NULL);
+        LinkedList1_Init(&o->connections_list);
+    } else {
+        // Standard mode (UDPGW-style)
+        if (!UdpGwClient_Init(&o->udpgw_client, udp_mtu, max_connections, send_buffer_size, keepalive_time, o->reactor, o,
+                              (UdpGwClient_handler_servererror)udpgw_handler_servererror,
+                              (UdpGwClient_handler_received)udpgw_handler_received
+        )) {
+            goto fail0;
+        }
+        
+        BTimer_Init(&o->reconnect_timer, reconnect_time, (BTimer_handler)reconnect_timer_handler, o);
+        o->have_socks = 0;
+        try_connect(o);
     }
-    
-    // init connections tree by conaddr
-    BAVL_Init(&o->connections_tree, OFFSET_DIFF(SocksUdpGwClient_connection, conaddr, connections_tree_node), (BAVL_comparator)conaddr_comparator, NULL);
-    
-    // init connections list
-    LinkedList1_Init(&o->connections_list);
-#else
-    // init udpgw client
-    if (!UdpGwClient_Init(&o->udpgw_client, udp_mtu, max_connections, send_buffer_size, keepalive_time, o->reactor, o,
-                          (UdpGwClient_handler_servererror)udpgw_handler_servererror,
-                          (UdpGwClient_handler_received)udpgw_handler_received
-    )) {
-        goto fail0;
-    }
-    
-    // init reconnect timer
-    BTimer_Init(&o->reconnect_timer, reconnect_time, (BTimer_handler)reconnect_timer_handler, o);
-    
-    // set have no SOCKS
-    o->have_socks = 0;
-    
-    // try connecting
-    try_connect(o);
-#endif
     
     DebugObject_Init(&o->d_obj);
     return 1;
@@ -544,24 +524,24 @@ void SocksUdpGwClient_Free (SocksUdpGwClient *o)
 {
     DebugObject_Free(&o->d_obj);
     
-#ifdef ANDROID
-    // free connections
-    while (!LinkedList1_IsEmpty(&o->connections_list)) {
-        SocksUdpGwClient_connection *con = UPPER_OBJECT(LinkedList1_GetFirst(&o->connections_list), SocksUdpGwClient_connection, connections_list_node);
-        connection_free(con);
+    if (o->use_relay) {
+        // free connections
+        while (!LinkedList1_IsEmpty(&o->connections_list)) {
+            SocksUdpGwClient_connection *con = UPPER_OBJECT(LinkedList1_GetFirst(&o->connections_list), SocksUdpGwClient_connection, connections_list_node);
+            connection_free(con);
+        }
+    } else {
+        // free SOCKS
+        if (o->have_socks) {
+            free_socks(o);
+        }
+        
+        // free reconnect timer
+        BReactor_RemoveTimer(o->reactor, &o->reconnect_timer);
+        
+        // free udpgw client
+        UdpGwClient_Free(&o->udpgw_client);
     }
-#else
-    // free SOCKS
-    if (o->have_socks) {
-        free_socks(o);
-    }
-    
-    // free reconnect timer
-    BReactor_RemoveTimer(o->reactor, &o->reconnect_timer);
-    
-    // free udpgw client
-    UdpGwClient_Free(&o->udpgw_client);
-#endif
 }
 
 void SocksUdpGwClient_SubmitPacket (SocksUdpGwClient *o, BAddr local_addr, BAddr remote_addr, int is_dns, const uint8_t *data, int data_len)
@@ -569,39 +549,39 @@ void SocksUdpGwClient_SubmitPacket (SocksUdpGwClient *o, BAddr local_addr, BAddr
     DebugObject_Access(&o->d_obj);
     // see asserts in UdpGwClient_SubmitPacket
     
-#ifdef ANDROID
-    ASSERT(local_addr.type == BADDR_TYPE_IPV4 || local_addr.type == BADDR_TYPE_IPV6)
-    ASSERT(remote_addr.type == BADDR_TYPE_IPV4 || remote_addr.type == BADDR_TYPE_IPV6)
-    ASSERT(data_len >= 0)
-    ASSERT(data_len <= o->udp_mtu)
-    
-    // build conaddr
-    SocksUdpGwClient_conaddr conaddr;
-    conaddr.local_addr = local_addr;
-    conaddr.remote_addr = remote_addr;
-    
-    // lookup connection
-    SocksUdpGwClient_connection *con = find_connection(o, conaddr);
-    
-    // if no connection and can't create a new one, reuse the least recently used une
-    if (!con && o->num_connections == o->max_connections) {
-        con = reuse_connection(o, conaddr);
-    }
-    
-    if (!con) {
-        // create new connection
-        con = connection_init(o, conaddr, data, data_len);
-    } else {
-        // move connection to front of the list
-        LinkedList1_Remove(&o->connections_list, &con->connections_list_node);
-        LinkedList1_Append(&o->connections_list, &con->connections_list_node);
+    if (o->use_relay) {
+        ASSERT(local_addr.type == BADDR_TYPE_IPV4 || local_addr.type == BADDR_TYPE_IPV6)
+        ASSERT(remote_addr.type == BADDR_TYPE_IPV4 || remote_addr.type == BADDR_TYPE_IPV6)
+        ASSERT(data_len >= 0)
+        ASSERT(data_len <= o->udp_mtu)
         
-        // send packet to existing connection
-        connection_send(con, data, data_len);
+        // build conaddr
+        SocksUdpGwClient_conaddr conaddr;
+        conaddr.local_addr = local_addr;
+        conaddr.remote_addr = remote_addr;
+        
+        // lookup connection
+        SocksUdpGwClient_connection *con = find_connection(o, conaddr);
+        
+        // if no connection and can't create a new one, reuse the least recently used une
+        if (!con && o->num_connections == o->max_connections) {
+            con = reuse_connection(o, conaddr);
+        }
+        
+        if (!con) {
+            // create new connection
+            con = connection_init(o, conaddr, data, data_len);
+        } else {
+            // move connection to front of the list
+            LinkedList1_Remove(&o->connections_list, &con->connections_list_node);
+            LinkedList1_Append(&o->connections_list, &con->connections_list_node);
+            
+            // send packet to existing connection
+            connection_send(con, data, data_len);
+        }
+    } else {
+        // submit to udpgw client
+        UdpGwClient_SubmitPacket(&o->udpgw_client, local_addr, remote_addr, is_dns, data, data_len);
     }
-#else
-    // submit to udpgw client
-    UdpGwClient_SubmitPacket(&o->udpgw_client, local_addr, remote_addr, is_dns, data, data_len);
-#endif
 }
 

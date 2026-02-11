@@ -30,6 +30,7 @@ class _SettingsTabState extends State<SettingsTab> {
   bool _autoTuning = true;
   bool _cpuWakelock = false;
   bool _enableUdpgw = true;
+  String _udpgwMode = "relay";
   String _bufferSize = "4m";
   String _logLevel = "info";
   double _coreCount = 4.0;
@@ -99,6 +100,7 @@ class _SettingsTabState extends State<SettingsTab> {
       _autoTuning = prefs.getBool('auto_tuning') ?? true;
       _cpuWakelock = prefs.getBool('cpu_wakelock') ?? false;
       _enableUdpgw = prefs.getBool('enable_udpgw') ?? true;
+      _udpgwMode = prefs.getString('udpgw_mode') ?? "relay";
       _bufferSize = prefs.getString('buffer_size') ?? "4m";
       _logLevel = prefs.getString('log_level') ?? "info";
       _coreCount = (prefs.getInt('core_count') ?? 4).toDouble();
@@ -114,6 +116,7 @@ class _SettingsTabState extends State<SettingsTab> {
     await prefs.setBool('auto_tuning', _autoTuning);
     await prefs.setBool('cpu_wakelock', _cpuWakelock);
     await prefs.setBool('enable_udpgw', _enableUdpgw);
+    await prefs.setString('udpgw_mode', _udpgwMode);
     await prefs.setString('buffer_size', _bufferSize);
     await prefs.setString('log_level', _logLevel);
     await prefs.setInt('core_count', _coreCount.toInt());
@@ -174,13 +177,24 @@ class _SettingsTabState extends State<SettingsTab> {
                   onChanged: (val) => setState(() => _enableUdpgw = val),
                 ),
                 if (_enableUdpgw)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: _buildTextInput(
-                      _udpgwPortCtrl,
-                      "UDPGW Port (Default: 7300)",
-                      Icons.door_sliding,
-                    ),
+                  Column(
+                    children: [
+                      _buildDropdownTile(
+                        "UDPGW Mode",
+                        "Relay (SOCKS5) or Standard (TCP)",
+                        _udpgwMode,
+                        ["relay", "standard"],
+                        (val) => setState(() => _udpgwMode = val!),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: _buildTextInput(
+                          _udpgwPortCtrl,
+                          "UDPGW Port (Default: 7300)",
+                          Icons.door_sliding,
+                        ),
+                      ),
+                    ],
                   ),
                 const Divider(),
                 Padding(

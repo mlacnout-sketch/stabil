@@ -126,6 +126,11 @@ class MainActivity: FlutterActivity() {
                 val multiplier = call.argument<Double>("recv_window_multiplier") ?: 1.0
                 val udpMode = call.argument<String>("udp_mode") ?: "tcp"
                 
+                // UDPGW Settings
+                val enableUdpgw = call.argument<Boolean>("enable_udpgw") ?: true
+                val udpgwMode = call.argument<String>("udpgw_mode") ?: "relay"
+                val udpgwPort = call.argument<String>("udpgw_port") ?: "7300"
+                
                 // Advanced Settings
                 val mtu = call.argument<Int>("mtu") ?: 1500
                 val autoTuning = call.argument<Boolean>("auto_tuning") ?: true
@@ -143,6 +148,9 @@ class MainActivity: FlutterActivity() {
                     .putString("server_obfs", obfs)
                     .putFloat("multiplier", multiplier.toFloat())
                     .putString("udp_mode", udpMode)
+                    .putBoolean("enable_udpgw", enableUdpgw)
+                    .putString("udpgw_mode", udpgwMode)
+                    .putString("udpgw_port", udpgwPort)
                     .putInt("mtu", mtu)
                     .putBoolean("auto_tuning", autoTuning)
                     .putString("buffer_size", bufferSize)

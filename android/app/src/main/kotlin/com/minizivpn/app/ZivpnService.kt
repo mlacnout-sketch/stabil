@@ -276,6 +276,7 @@ class ZivpnService : VpnService() {
                     }
 
                     val useUdpgw = prefs.getBoolean("enable_udpgw", true)
+                    val udpgwMode = prefs.getString("udpgw_mode", "relay") ?: "relay"
                     val udpgwPort = prefs.getString("udpgw_port", "7300") ?: "7300"
 
                     val tunCmd = arrayListOf(
@@ -290,7 +291,12 @@ class ZivpnService : VpnService() {
                     )
                     
                     if (useUdpgw) {
-                        tunCmd.add("--enable-udprelay")
+                        if (udpgwMode == "standard") {
+                            tunCmd.add("--udpgw-remote-server-addr")
+                            tunCmd.add("127.0.0.1:$udpgwPort")
+                        } else {
+                            tunCmd.add("--enable-udprelay")
+                        }
                         tunCmd.add("--udprelay-max-connections")
                         tunCmd.add("512")
                     }

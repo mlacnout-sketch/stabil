@@ -731,15 +731,12 @@ void print_help (const char *name)
         "        [--password <password>]\n"
         "        [--password-file <file>]\n"
         "        [--append-source-to-username]\n"
-#ifdef ANDROID
         "        [--enable-udprelay]\n"
         "        [--udprelay-max-connections <number>]\n"
-#else
         "        [--udpgw-remote-server-addr <addr>]\n"
         "        [--udpgw-max-connections <number>]\n"
         "        [--udpgw-connection-buffer-size <number>]\n"
         "        [--udpgw-transparent-dns]\n"
-#endif
         "Address format is a.b.c.d:port (IPv4) or [addr]:port (IPv6).\n",
         name
     );
@@ -975,10 +972,9 @@ int parse_arguments (int argc, char *argv[])
         else if (!strcmp(arg, "--append-source-to-username")) {
             options.append_source_to_username = 1;
         }
-#ifdef ANDROID
         else if (!strcmp(arg, "--enable-udprelay")) {
             options.udpgw_remote_server_addr = "0.0.0.0:0";
-#else
+        }
         else if (!strcmp(arg, "--udpgw-remote-server-addr")) {
             if (1 >= argc - i) {
                 fprintf(stderr, "%s: requires an argument\n", arg);
@@ -986,13 +982,8 @@ int parse_arguments (int argc, char *argv[])
             }
             options.udpgw_remote_server_addr = argv[i + 1];
             i++;
-#endif
         }
-#ifdef ANDROID
-        else if (!strcmp(arg, "--udprelay-max-connections")) {
-#else
-        else if (!strcmp(arg, "--udpgw-max-connections")) {
-#endif
+        else if (!strcmp(arg, "--udprelay-max-connections") || !strcmp(arg, "--udpgw-max-connections")) {
             if (1 >= argc - i) {
                 fprintf(stderr, "%s: requires an argument\n", arg);
                 return 0;
@@ -1003,7 +994,6 @@ int parse_arguments (int argc, char *argv[])
             }
             i++;
         }
-#ifndef ANDROID
         else if (!strcmp(arg, "--udpgw-connection-buffer-size")) {
             if (1 >= argc - i) {
                 fprintf(stderr, "%s: requires an argument\n", arg);
@@ -1018,7 +1008,6 @@ int parse_arguments (int argc, char *argv[])
         else if (!strcmp(arg, "--udpgw-transparent-dns")) {
             options.udpgw_transparent_dns = 1;
         }
-#endif
         else {
             fprintf(stderr, "unknown option: %s\n", arg);
             return 0;

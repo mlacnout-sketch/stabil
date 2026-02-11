@@ -32,7 +32,8 @@
 #include <misc/debug.h>
 #include <base/DebugObject.h>
 #include <system/BReactor.h>
-#ifdef ANDROID
+#include <udpgw_client/UdpGwClient.h>
+#include <socksclient/BSocksClient.h>
 #include <protocol/udpgw_proto.h>
 #include <protocol/packetproto.h>
 #include <system/BDatagram.h>
@@ -42,10 +43,6 @@
 #include <structure/BAVL.h>
 #include <structure/LinkedList1.h>
 #include <misc/offset.h>
-#else
-#include <udpgw_client/UdpGwClient.h>
-#include <socksclient/BSocksClient.h>
-#endif
 
 typedef void (*SocksUdpGwClient_handler_received) (void *user, BAddr local_addr, BAddr remote_addr, const uint8_t *data, int data_len);
 
@@ -58,23 +55,26 @@ typedef struct {
     BReactor *reactor;
     void *user;
     SocksUdpGwClient_handler_received handler_received;
-#ifdef ANDROID
+    
+    int use_relay;
+
+    // Relay mode (Android-style)
     int udpgw_mtu;
     int num_connections;
     int max_connections;
     BAVL connections_tree;
     LinkedList1 connections_list;
-#else
+
+    // Standard mode (UDPGW-style)
     UdpGwClient udpgw_client;
     BTimer reconnect_timer;
     int have_socks;
     BSocksClient socks_client;
     int socks_up;
-#endif
+
     DebugObject d_obj;
 } SocksUdpGwClient;
 
-#ifdef ANDROID
 typedef struct {
     BAddr local_addr;
     BAddr remote_addr;
@@ -94,7 +94,6 @@ typedef struct {
     BAVLNode connections_tree_node;
     LinkedList1Node connections_list_node;
 } SocksUdpGwClient_connection;
-#endif
 
 int SocksUdpGwClient_Init (SocksUdpGwClient *o, int udp_mtu, int max_connections, int send_buffer_size, btime_t keepalive_time,
                            BAddr socks_server_addr, const struct BSocksClient_auth_info *auth_info, size_t num_auth_info,
