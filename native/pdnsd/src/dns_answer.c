@@ -1730,7 +1730,16 @@ void *udp_server_thread(void *dummy)
 							buf->pi.pi6.ipi6_ifindex=sip.ipi_ifindex;
 							break;
 						}
-						/* FIXME: What about BSD? probably ok, but... */
+#  else
+#   ifdef IP_RECVDSTADDR
+						if (cmsg->cmsg_level==IPPROTO_IP && cmsg->cmsg_type==IP_RECVDSTADDR) {
+							struct in_addr sip;
+							memcpy(&sip,CMSG_DATA(cmsg),sizeof(sip));
+							IPV6_MAPIPV4(&sip,&buf->pi.pi6.ipi6_addr);
+							buf->pi.pi6.ipi6_ifindex=0;
+							break;
+						}
+#   endif
 #  endif
 						cmsg=CMSG_NXTHDR(&msg,cmsg);
 					}
