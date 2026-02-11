@@ -100,7 +100,14 @@ target_include_directories(tun2socks PRIVATE
 )
 
 target_link_libraries(tun2socks ancillary log dl)
-target_compile_options(tun2socks PRIVATE -O3)
+target_compile_options(tun2socks PRIVATE 
+    -O3
+    -Wno-parentheses
+    -Wno-pointer-sign
+    -Wno-unused-value
+    -Wno-unused-label
+    -Wno-unused-variable
+)
 
 if(NOT SKIP_JNI_CHECK)
     # --- system (JNI) ---
