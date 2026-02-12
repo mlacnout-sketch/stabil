@@ -330,7 +330,6 @@ class MainActivity: FlutterActivity() {
     }
     
     override fun onDestroy() {
-        stopEngine()
         stopStatsTimer() // Clean up timer
         try {
             unregisterReceiver(logReceiver)

@@ -97,6 +97,25 @@ class ZivpnService : VpnService() {
         }
         return START_NOT_STICKY
     }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val restartServiceIntent = Intent(applicationContext, this.javaClass)
+        restartServiceIntent.setPackage(packageName)
+        restartServiceIntent.action = ACTION_CONNECT // Ensure it tries to reconnect
+        
+        val restartServicePendingIntent = PendingIntent.getService(
+            applicationContext, 1, restartServiceIntent,
+            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val alarmService = applicationContext.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+        alarmService.set(
+            android.app.AlarmManager.ELAPSED_REALTIME,
+            System.currentTimeMillis() + 1000,
+            restartServicePendingIntent
+        )
+        Log.d("ZIVPN-Core", "App swiped from recent tasks. Scheduling restart.")
+        super.onTaskRemoved(rootIntent)
+    }
     
     private fun startForegroundService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
