@@ -118,10 +118,20 @@ class _SettingsTabState extends State<SettingsTab> {
     if (mounted) setState(() => _appVersion = "v${info.version}");
   }
 
+  // Helper to safely get Int from prefs (handles legacy String storage)
+  int _getIntSafe(SharedPreferences prefs, String key, int defValue) {
+    try {
+      return prefs.getInt(key) ?? defValue;
+    } catch (e) {
+      // If stored as String, try parsing
+      return int.tryParse(prefs.getString(key) ?? "") ?? defValue;
+    }
+  }
+
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _mtuCtrl.text = (prefs.getInt('mtu') ?? 1500).toString();
+      _mtuCtrl.text = _getIntSafe(prefs, 'mtu', 1500).toString();
       _pingTargetCtrl.text = prefs.getString('ping_target') ?? "http://www.gstatic.com/generate_204";
       _pingIntervalCtrl.text = prefs.getString('ping_interval') ?? "3";
       _udpgwPortCtrl.text = prefs.getString('udpgw_port') ?? "7300";
@@ -137,7 +147,7 @@ class _SettingsTabState extends State<SettingsTab> {
       _filterApps = prefs.getBool('filter_apps') ?? false;
       _bypassMode = prefs.getBool('bypass_mode') ?? false;
       _logLevel = prefs.getString('log_level') ?? "info";
-      _coreCount = (prefs.getInt('core_count') ?? 4).toDouble();
+      _coreCount = (_getIntSafe(prefs, 'core_count', 4)).toDouble();
     });
   }
 
