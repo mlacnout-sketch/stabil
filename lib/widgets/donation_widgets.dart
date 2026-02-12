@@ -45,7 +45,7 @@ class _SiOrenBannerState extends State<SiOrenBanner> {
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.orange.withOpacity(0.3)),
+          border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
           boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 4))],
         ),
         child: Column(
@@ -149,7 +149,7 @@ void showSarcasticDialog(BuildContext context, {required VoidCallback onProceed}
                   backgroundColor: Colors.purpleAccent,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  shadowColor: Colors.purpleAccent.withOpacity(0.4),
+                  shadowColor: Colors.purpleAccent.withValues(alpha: 0.4),
                   elevation: 8,
                 ),
                 onPressed: () {

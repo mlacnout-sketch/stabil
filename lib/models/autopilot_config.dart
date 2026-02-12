@@ -5,6 +5,7 @@ class AutoPilotConfig {
   final int airplaneModeDelaySeconds;
   final int recoveryWaitSeconds;
   final bool enableStabilizer;
+  final bool autoReset; // Added back
   final int stabilizerSizeMb;
 
   const AutoPilotConfig({
@@ -14,6 +15,7 @@ class AutoPilotConfig {
     this.airplaneModeDelaySeconds = 2,
     this.recoveryWaitSeconds = 10,
     this.enableStabilizer = false,
+    this.autoReset = false, // Default false
     this.stabilizerSizeMb = 1,
   });
 
@@ -24,6 +26,7 @@ class AutoPilotConfig {
     int? airplaneModeDelaySeconds,
     int? recoveryWaitSeconds,
     bool? enableStabilizer,
+    bool? autoReset,
     int? stabilizerSizeMb,
   }) {
     return AutoPilotConfig(
@@ -33,6 +36,7 @@ class AutoPilotConfig {
       airplaneModeDelaySeconds: airplaneModeDelaySeconds ?? this.airplaneModeDelaySeconds,
       recoveryWaitSeconds: recoveryWaitSeconds ?? this.recoveryWaitSeconds,
       enableStabilizer: enableStabilizer ?? this.enableStabilizer,
+      autoReset: autoReset ?? this.autoReset,
       stabilizerSizeMb: stabilizerSizeMb ?? this.stabilizerSizeMb,
     );
   }

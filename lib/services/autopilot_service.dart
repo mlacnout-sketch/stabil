@@ -44,6 +44,7 @@ class AutoPilotService {
         airplaneModeDelaySeconds: prefs.getInt('airplane_delay_ap') ?? 2,
         recoveryWaitSeconds: prefs.getInt('recovery_wait_ap') ?? 10,
         enableStabilizer: prefs.getBool('enable_stabilizer_ap') ?? false,
+        autoReset: prefs.getBool('auto_reset_ap') ?? false,
         stabilizerSizeMb: prefs.getInt('stabilizer_size_ap') ?? 1,
       );
     } catch (e) {
@@ -60,6 +61,7 @@ class AutoPilotService {
     await prefs.setInt('airplane_delay_ap', newConfig.airplaneModeDelaySeconds);
     await prefs.setInt('recovery_wait_ap', newConfig.recoveryWaitSeconds);
     await prefs.setBool('enable_stabilizer_ap', newConfig.enableStabilizer);
+    await prefs.setBool('auto_reset_ap', newConfig.autoReset);
     await prefs.setInt('stabilizer_size_ap', newConfig.stabilizerSizeMb);
     
     // No restart needed, just config update

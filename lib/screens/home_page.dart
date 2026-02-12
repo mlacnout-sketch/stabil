@@ -15,6 +15,7 @@ import 'tabs/settings_tab.dart';
 import '../viewmodels/update_viewmodel.dart';
 import '../repositories/backup_repository.dart';
 import '../services/autopilot_service.dart';
+import '../models/autopilot_state.dart';
 import '../models/app_version.dart';
 import '../models/account.dart';
 import '../widgets/donation_widgets.dart';
