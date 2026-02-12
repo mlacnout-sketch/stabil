@@ -232,18 +232,31 @@ class AutoPilotService {
     ));
     
     final client = http.Client();
-    try {
-      for (int i = 1; i <= _config.stabilizerSizeMb; i++) {
-        final request = http.Request('GET', Uri.parse('http://speedtest.tele2.net/1MB.zip'));
-        request.headers['Connection'] = 'close';
-        final response = await client.send(request).timeout(const Duration(seconds: 10));
-        if (response.statusCode == 200) {
-          await for (var _ in response.stream) {}
+    
+    // Total chunks equal to MB size (1 chunk = 1MB)
+    int totalChunks = _config.stabilizerSizeMb;
+    
+    for (int i = 1; i <= totalChunks; i++) {
+        try {
+            _log('Stabilizer: Chunk $i/$totalChunks (1MB)...');
+            final request = http.Request('GET', Uri.parse('http://speedtest.tele2.net/1MB.zip'));
+            request.headers['Connection'] = 'close'; // Force new connection
+            
+            final response = await client.send(request).timeout(const Duration(seconds: 15));
+            
+            if (response.statusCode == 200) {
+                // Drain stream to actually download bytes
+                await response.stream.drain();
+            } else {
+                _log('Stabilizer: Chunk $i failed (HTTP ${response.statusCode})');
+            }
+        } catch (e) {
+            _log('Stabilizer: Chunk $i error: $e');
+            // Wait a bit before next chunk if failed
+            await Future.delayed(const Duration(seconds: 1)); 
         }
-      }
-    } catch (e) {} finally {
-      client.close();
     }
+    client.close();
   }
 
   void _updateState(AutoPilotState newState) {
