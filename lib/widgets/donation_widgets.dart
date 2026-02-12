@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:math';
 
 // --- KONFIGURASI SAWERIA ---
 const String _kSaweriaUrl = "https://saweria.co/Damnwhoknows";
@@ -23,7 +24,16 @@ class SiOrenBanner extends StatefulWidget {
 }
 
 class _SiOrenBannerState extends State<SiOrenBanner> {
-  bool _isVisible = true; 
+  bool _isVisible = false; 
+
+  @override
+  void initState() {
+    super.initState();
+    // ALGORITMA PROBABILITAS: 30% Muncul
+    if (Random().nextInt(100) < 30) {
+      _isVisible = true;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,11 +57,11 @@ class _SiOrenBannerState extends State<SiOrenBanner> {
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.orange.withValues(alpha: 0.3), width: 1.5),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.5), width: 2), // OREN LEBIH TEBAL
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.orange.withValues(alpha: 0.1),
-                    blurRadius: 12,
+                    color: Colors.orange.withValues(alpha: 0.15),
+                    blurRadius: 15,
                     offset: const Offset(0, 4),
                   )
                 ],
@@ -63,7 +73,7 @@ class _SiOrenBannerState extends State<SiOrenBanner> {
                   const Row(
                     children: [
                       Text(
-                        "🐱 CAPEK IKLAN?", 
+                        "🐈 CAPEK SAMA SI OREN?", 
                         style: TextStyle(
                           color: Colors.orangeAccent, 
                           fontWeight: FontWeight.w900, 
@@ -72,7 +82,7 @@ class _SiOrenBannerState extends State<SiOrenBanner> {
                         )
                       ),
                       Spacer(),
-                      Icon(Icons.close, color: Colors.grey, size: 16),
+                      Text("✖️", style: TextStyle(fontSize: 12, color: Colors.grey)),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -94,7 +104,7 @@ class _SiOrenBannerState extends State<SiOrenBanner> {
                           foregroundColor: Colors.grey,
                           textStyle: const TextStyle(fontSize: 11),
                         ),
-                        child: const Text("Skip, gw suka buang waktu"),
+                        child: const Text("🤡 Skip, gw suka iklan"), 
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton.icon(
@@ -106,7 +116,7 @@ class _SiOrenBannerState extends State<SiOrenBanner> {
                           elevation: 4,
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                         ),
-                        icon: const Icon(Icons.local_cafe_rounded, size: 18),
+                        icon: const Text("☕", style: TextStyle(fontSize: 18)),
                         label: const Text("Traktir Kopi", style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ],
@@ -126,6 +136,7 @@ class _SiOrenBannerState extends State<SiOrenBanner> {
                   shape: BoxShape.circle,
                   color: Colors.orange.withValues(alpha: 0.1),
                 ),
+                child: const Center(child: Text("🍊", style: TextStyle(fontSize: 24))),
               ),
             ),
           ],
@@ -138,7 +149,13 @@ class _SiOrenBannerState extends State<SiOrenBanner> {
 // ==========================================
 // 2. DIALOG SARKAS (FINAL BOSS)
 // ==========================================
-void showSarcasticDialog(BuildContext context, {required VoidCallback onProceed}) {
+// Returns true if dialog shown, false if skipped by RNG
+bool showSarcasticDialog(BuildContext context, {required VoidCallback onProceed}) {
+  // ALGORITMA PROBABILITAS: 40% Muncul
+  if (Random().nextInt(100) > 40) {
+    return false; // Skip dialog, langsung proceed di logic pemanggil
+  }
+
   showDialog(
     context: context,
     barrierDismissible: false,
@@ -163,7 +180,7 @@ void showSarcasticDialog(BuildContext context, {required VoidCallback onProceed}
                   color: Colors.purpleAccent.withValues(alpha: 0.1),
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                 ),
-                child: const Icon(Icons.volunteer_activism_rounded, size: 56, color: Colors.purpleAccent),
+                child: const Text("🤑", textAlign: TextAlign.center, style: TextStyle(fontSize: 56)),
               ),
               
               Padding(
@@ -211,7 +228,7 @@ void showSarcasticDialog(BuildContext context, {required VoidCallback onProceed}
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text("Support Dev ", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                            Icon(Icons.favorite, size: 18),
+                            Text("💖", style: TextStyle(fontSize: 18)),
                           ],
                         ),
                       ),
@@ -229,7 +246,7 @@ void showSarcasticDialog(BuildContext context, {required VoidCallback onProceed}
                         foregroundColor: Colors.grey,
                       ),
                       child: const Text(
-                        "Skip, saya tim gratisan sejati",
+                        "🗿 Skip, saya tim gratisan sejati",
                         style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
                       ),
                     ),
@@ -242,4 +259,5 @@ void showSarcasticDialog(BuildContext context, {required VoidCallback onProceed}
       );
     },
   );
+  return true;
 }

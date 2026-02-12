@@ -293,7 +293,11 @@ class _HomePageState extends State<HomePage> {
       }
 
       if (mounted) {
-        showSarcasticDialog(context, onProceed: performStop);
+        // RNG Check inside showSarcasticDialog
+        bool shown = showSarcasticDialog(context, onProceed: performStop);
+        if (!shown) {
+            performStop();
+        }
       } else {
         performStop();
       }
