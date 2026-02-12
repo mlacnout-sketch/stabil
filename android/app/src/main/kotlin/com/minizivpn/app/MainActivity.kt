@@ -55,8 +55,6 @@ class MainActivity: FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleIntent(intent) // Check intent on launch
-        // Ensure environment is clean on launch
-        stopEngine()
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(logReceiver, IntentFilter(ACTION_LOG), Context.RECEIVER_NOT_EXPORTED)
@@ -145,60 +143,37 @@ class MainActivity: FlutterActivity() {
                 result.success(initialIntentData)
                 initialIntentData = null // Clear after reading
             } else if (call.method == "startCore") {
-                val ip = call.argument<String>("ip") ?: ""
-                val range = call.argument<String>("port_range") ?: "6000-19999"
-                val pass = call.argument<String>("pass") ?: ""
-                val obfs = call.argument<String>("obfs") ?: "hu``hqb`c"
-                val udpMode = call.argument<String>("udp_mode") ?: "tcp"
+                val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE).edit()
                 
-                // UDPGW Settings
-                val enableUdpgw = call.argument<Boolean>("enable_udpgw") ?: true
-                val udpgwPort = call.argument<String>("udpgw_port") ?: "7300"
-                val pingInterval = call.argument<Int>("ping_interval") ?: 3
-                val pingTarget = call.argument<String>("ping_target") ?: "http://www.gstatic.com/generate_204"
-                
-                // Apps Filter
-                val filterApps = call.argument<Boolean>("filter_apps") ?: false
-                val bypassMode = call.argument<Boolean>("bypass_mode") ?: false
-                val appsList = call.argument<String>("apps_list") ?: ""
-                
-                // Advanced Settings
-                val mtu = call.argument<Int>("mtu") ?: 1500
-                val logLevel = call.argument<String>("log_level") ?: "info"
-                val coreCount = call.argument<Int>("core_count") ?: 4
-                val cpuWakelock = call.argument<Boolean>("cpu_wakelock") ?: false
-                
-                val tcpSndBuf = call.argument<String>("tcp_snd_buf") ?: "65535"
-                val tcpWnd = call.argument<String>("tcp_wnd") ?: "65535"
-                val socksBuf = call.argument<String>("socks_buf") ?: "65536"
-                val udpgwMaxConn = call.argument<String>("udpgw_max_connections") ?: "512"
-                val udpgwBufSize = call.argument<String>("udpgw_buffer_size") ?: "32"
+                // Strings
+                prefs.putString("flutter.server_ip", call.argument<String>("ip") ?: "")
+                prefs.putString("flutter.server_range", call.argument<String>("port_range") ?: "6000-19999")
+                prefs.putString("flutter.server_pass", call.argument<String>("pass") ?: "")
+                prefs.putString("flutter.server_obfs", call.argument<String>("obfs") ?: "hu``hqb`c")
+                prefs.putString("flutter.udp_mode", call.argument<String>("udp_mode") ?: "udp")
+                prefs.putString("flutter.udpgw_port", call.argument<String>("udpgw_port") ?: "7300")
+                prefs.putString("flutter.udpgw_max_connections", call.argument<String>("udpgw_max_connections") ?: "512")
+                prefs.putString("flutter.udpgw_buffer_size", call.argument<String>("udpgw_buffer_size") ?: "32")
+                prefs.putString("flutter.tcp_snd_buf", call.argument<String>("tcp_snd_buf") ?: "65535")
+                prefs.putString("flutter.tcp_wnd", call.argument<String>("tcp_wnd") ?: "65535")
+                prefs.putString("flutter.socks_buf", call.argument<String>("socks_buf") ?: "65536")
+                prefs.putString("flutter.log_level", call.argument<String>("log_level") ?: "info")
+                prefs.putString("flutter.ping_target", call.argument<String>("ping_target") ?: "http://www.gstatic.com/generate_204")
+                prefs.putString("flutter.apps_list", call.argument<String>("apps_list") ?: "")
+                prefs.putString("flutter.upstream_dns", call.argument<String>("upstream_dns") ?: "208.67.222.222")
 
-                // Save Config for ZivpnService
-                getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-                    .edit()
-                    .putString("flutter.server_ip", ip)
-                    .putString("flutter.server_range", range)
-                    .putString("flutter.server_pass", pass)
-                    .putString("flutter.server_obfs", obfs)
-                    .putString("flutter.udp_mode", udpMode)
-                    .putBoolean("flutter.enable_udpgw", enableUdpgw)
-                    .putString("flutter.udpgw_port", udpgwPort)
-                    .putString("flutter.udpgw_max_connections", udpgwMaxConn)
-                    .putString("flutter.udpgw_buffer_size", udpgwBufSize)
-                    .putInt("flutter.ping_interval", pingInterval)
-                    .putString("flutter.ping_target", pingTarget)
-                    .putBoolean("flutter.filter_apps", filterApps)
-                    .putBoolean("flutter.bypass_mode", bypassMode)
-                    .putString("flutter.apps_list", appsList)
-                    .putInt("flutter.mtu", mtu)
-                    .putString("flutter.tcp_snd_buf", tcpSndBuf)
-                    .putString("flutter.tcp_wnd", tcpWnd)
-                    .putString("flutter.socks_buf", socksBuf)
-                    .putString("flutter.log_level", logLevel)
-                    .putInt("flutter.core_count", coreCount)
-                    .putBoolean("flutter.cpu_wakelock", cpuWakelock)
-                    .commit()
+                // Booleans
+                prefs.putBoolean("flutter.enable_udpgw", call.argument<Boolean>("enable_udpgw") ?: true)
+                prefs.putBoolean("flutter.filter_apps", call.argument<Boolean>("filter_apps") ?: false)
+                prefs.putBoolean("flutter.bypass_mode", call.argument<Boolean>("bypass_mode") ?: false)
+                prefs.putBoolean("flutter.cpu_wakelock", call.argument<Boolean>("cpu_wakelock") ?: false)
+
+                // Integers
+                prefs.putInt("flutter.mtu", call.argument<Int>("mtu") ?: 1500)
+                prefs.putInt("flutter.ping_interval", call.argument<Int>("ping_interval") ?: 3)
+                prefs.putInt("flutter.core_count", call.argument<Int>("core_count") ?: 4)
+                
+                prefs.apply()
 
                 sendToLog("Config saved. Ready to start VPN.")
                 result.success("READY")

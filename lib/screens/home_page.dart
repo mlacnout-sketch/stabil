@@ -209,7 +209,7 @@ class _HomePageState extends State<HomePage> {
     if (!prefs.containsKey('socks_buf')) await prefs.setString('socks_buf', '65536');
     if (!prefs.containsKey('udpgw_max_connections')) await prefs.setString('udpgw_max_connections', '512');
     if (!prefs.containsKey('udpgw_buffer_size')) await prefs.setString('udpgw_buffer_size', '32');
-    if (!prefs.containsKey('ping_interval')) await prefs.setString('ping_interval', '3');
+    if (!prefs.containsKey('ping_interval')) await prefs.setInt('ping_interval', 3);
     if (!prefs.containsKey('ping_target')) await prefs.setString('ping_target', 'http://www.gstatic.com/generate_204');
     if (!prefs.containsKey('log_level')) await prefs.setString('log_level', 'info');
     if (!prefs.containsKey('core_count')) await prefs.setInt('core_count', 4);
@@ -373,12 +373,11 @@ class _HomePageState extends State<HomePage> {
           "tcp_snd_buf": prefs.getString('tcp_snd_buf') ?? "65535",
           "tcp_wnd": prefs.getString('tcp_wnd') ?? "65535",
           "socks_buf": prefs.getString('socks_buf') ?? "65536",
-          "ping_interval": int.tryParse(prefs.getString('ping_interval') ?? "3") ?? 3,
+          "ping_interval": prefs.getInt('ping_interval') ?? 3,
           "ping_target": prefs.getString('ping_target') ?? "http://www.gstatic.com/generate_204",
           "filter_apps": prefs.getBool('filter_apps') ?? false,
           "bypass_mode": prefs.getBool('bypass_mode') ?? false,
           "apps_list": prefs.getString('apps_list') ?? "",
-          "buffer_size": prefs.getString('buffer_size') ?? "4m",
           "log_level": prefs.getString('log_level') ?? "info",
           "core_count": (prefs.getInt('core_count') ?? 4),
           "cpu_wakelock": prefs.getBool('cpu_wakelock') ?? false
