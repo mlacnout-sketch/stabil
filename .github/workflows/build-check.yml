@@ -46,16 +46,26 @@ jobs:
           flutter clean
           flutter pub get
 
-      - name: Build APK
+      - name: Decode Signing Keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: |
           if [ ! -z "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 --decode > android/app/release.jks
+            echo "Keystore decoded successfully to android/app/release.jks"
+            ls -l android/app/release.jks
+          else
+            echo "Release keystore secret is empty. Generating fallback debug keystore..."
+            keytool -genkey -v -keystore android/app/release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias androiddebugkey -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
           fi
+
+      - name: Build APK
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/android/app/release.jks
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'androiddebugkey' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'android' }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'android' }}
+        run: |
           flutter build apk --release --target-platform android-arm64
 
       - name: Upload Artifact
