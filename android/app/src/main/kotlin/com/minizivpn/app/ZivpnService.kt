@@ -268,7 +268,12 @@ class ZivpnService : VpnService() {
                 // Enforce standard UDPGW mode for all configurations
                 // This aligns with the removal of Android-specific "relay" mode in native code
                 tunCmd.add("--udpgw-remote-server-addr"); tunCmd.add("127.0.0.1:$udpgwPort")
-                tunCmd.add("--udpgw-max-connections"); tunCmd.add("512")
+                
+                val udpgwMaxConn = prefs.getString("udpgw_max_connections", "512") ?: "512"
+                val udpgwBufSize = prefs.getString("udpgw_buffer_size", "32") ?: "32"
+                
+                tunCmd.add("--udpgw-max-connections"); tunCmd.add(udpgwMaxConn)
+                tunCmd.add("--udpgw-connection-buffer-size"); tunCmd.add(udpgwBufSize)
             }
 
             val tunProc = ProcessBuilder(tunCmd).directory(filesDir).start()

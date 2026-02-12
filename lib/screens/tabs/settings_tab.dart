@@ -27,6 +27,8 @@ class _SettingsTabState extends State<SettingsTab> {
   final _pingTargetCtrl = TextEditingController();
   final _pingIntervalCtrl = TextEditingController();
   final _udpgwPortCtrl = TextEditingController();
+  final _udpgwMaxConnCtrl = TextEditingController();
+  final _udpgwBufSizeCtrl = TextEditingController();
   final _dnsCtrl = TextEditingController();
   final _appsListCtrl = TextEditingController();
   final _tcpSndBufCtrl = TextEditingController();
@@ -123,6 +125,8 @@ class _SettingsTabState extends State<SettingsTab> {
       _pingTargetCtrl.text = prefs.getString('ping_target') ?? "http://www.gstatic.com/generate_204";
       _pingIntervalCtrl.text = prefs.getString('ping_interval') ?? "3";
       _udpgwPortCtrl.text = prefs.getString('udpgw_port') ?? "7300";
+      _udpgwMaxConnCtrl.text = prefs.getString('udpgw_max_connections') ?? "512";
+      _udpgwBufSizeCtrl.text = prefs.getString('udpgw_buffer_size') ?? "32";
       _dnsCtrl.text = prefs.getString('upstream_dns') ?? "208.67.222.222";
       _appsListCtrl.text = prefs.getString('apps_list') ?? "";
       _tcpSndBufCtrl.text = prefs.getString('tcp_snd_buf') ?? "65535";
@@ -143,6 +147,8 @@ class _SettingsTabState extends State<SettingsTab> {
     await prefs.setString('ping_target', _pingTargetCtrl.text);
     await prefs.setString('ping_interval', _pingIntervalCtrl.text);
     await prefs.setString('udpgw_port', _udpgwPortCtrl.text);
+    await prefs.setString('udpgw_max_connections', _udpgwMaxConnCtrl.text);
+    await prefs.setString('udpgw_buffer_size', _udpgwBufSizeCtrl.text);
     await prefs.setString('upstream_dns', _dnsCtrl.text);
     await prefs.setString('apps_list', _appsListCtrl.text);
     await prefs.setString('tcp_snd_buf', _tcpSndBufCtrl.text);
@@ -193,13 +199,33 @@ class _SettingsTabState extends State<SettingsTab> {
                   onChanged: (val) => setState(() => _enableUdpgw = val),
                 ),
                 if (_enableUdpgw)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: _buildTextInput(
-                      _udpgwPortCtrl,
-                      "Udp Gateway (Remote)",
-                      Icons.door_sliding,
-                    ),
+                  Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: _buildTextInput(
+                          _udpgwPortCtrl,
+                          "Udp Gateway Port (Remote)",
+                          Icons.door_sliding,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: _buildTextInput(
+                          _udpgwMaxConnCtrl,
+                          "Max UDP Connections",
+                          Icons.connect_without_contact,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: _buildTextInput(
+                          _udpgwBufSizeCtrl,
+                          "UDP Buffer (Packets)",
+                          Icons.shopping_bag,
+                        ),
+                      ),
+                    ],
                   ),
                 const Divider(),
                 const ListTile(
