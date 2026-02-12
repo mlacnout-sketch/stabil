@@ -30,13 +30,10 @@ class _SettingsTabState extends State<SettingsTab> {
   final _dnsCtrl = TextEditingController();
   final _appsListCtrl = TextEditingController();
 
-  bool _autoTuning = true;
   bool _cpuWakelock = false;
   bool _enableUdpgw = true;
   bool _filterApps = false;
   bool _bypassMode = false;
-  String _udpgwMode = "relay";
-  String _bufferSize = "4m";
   String _logLevel = "info";
   double _coreCount = 4.0;
   String _appVersion = "Unknown";
@@ -125,13 +122,10 @@ class _SettingsTabState extends State<SettingsTab> {
       _udpgwPortCtrl.text = prefs.getString('udpgw_port') ?? "7300";
       _dnsCtrl.text = prefs.getString('upstream_dns') ?? "208.67.222.222";
       _appsListCtrl.text = prefs.getString('apps_list') ?? "";
-      _autoTuning = prefs.getBool('auto_tuning') ?? true;
       _cpuWakelock = prefs.getBool('cpu_wakelock') ?? false;
       _enableUdpgw = prefs.getBool('enable_udpgw') ?? true;
       _filterApps = prefs.getBool('filter_apps') ?? false;
       _bypassMode = prefs.getBool('bypass_mode') ?? false;
-      _udpgwMode = prefs.getString('udpgw_mode') ?? "relay";
-      _bufferSize = prefs.getString('buffer_size') ?? "4m";
       _logLevel = prefs.getString('log_level') ?? "info";
       _coreCount = (prefs.getInt('core_count') ?? 4).toDouble();
     });
@@ -145,13 +139,10 @@ class _SettingsTabState extends State<SettingsTab> {
     await prefs.setString('udpgw_port', _udpgwPortCtrl.text);
     await prefs.setString('upstream_dns', _dnsCtrl.text);
     await prefs.setString('apps_list', _appsListCtrl.text);
-    await prefs.setBool('auto_tuning', _autoTuning);
     await prefs.setBool('cpu_wakelock', _cpuWakelock);
     await prefs.setBool('enable_udpgw', _enableUdpgw);
     await prefs.setBool('filter_apps', _filterApps);
     await prefs.setBool('bypass_mode', _bypassMode);
-    await prefs.setString('udpgw_mode', _udpgwMode);
-    await prefs.setString('buffer_size', _bufferSize);
     await prefs.setString('log_level', _logLevel);
     await prefs.setInt('core_count', _coreCount.toInt());
 
@@ -193,24 +184,13 @@ class _SettingsTabState extends State<SettingsTab> {
                   onChanged: (val) => setState(() => _enableUdpgw = val),
                 ),
                 if (_enableUdpgw)
-                  Column(
-                    children: [
-                      _buildDropdownTile(
-                        "UDPGW Mode",
-                        "Relay (SOCKS5) or Standard (TCP)",
-                        _udpgwMode,
-                        ["relay", "standard"],
-                        (val) => setState(() => _udpgwMode = val!),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: _buildTextInput(
-                          _udpgwPortCtrl,
-                          "Udp Gateway (Remote)",
-                          Icons.door_sliding,
-                        ),
-                      ),
-                    ],
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: _buildTextInput(
+                      _udpgwPortCtrl,
+                      "Udp Gateway (Remote)",
+                      Icons.door_sliding,
+                    ),
                   ),
                 const Divider(),
                 const ListTile(
@@ -279,12 +259,6 @@ class _SettingsTabState extends State<SettingsTab> {
                   value: _cpuWakelock,
                   onChanged: (val) => setState(() => _cpuWakelock = val),
                 ),
-                SwitchListTile(
-                  title: const Text("TCP Auto Tuning"),
-                  subtitle: const Text("Dynamic buffer sizing for stability"),
-                  value: _autoTuning,
-                  onChanged: (val) => setState(() => _autoTuning = val),
-                ),
                 const Divider(),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -302,13 +276,6 @@ class _SettingsTabState extends State<SettingsTab> {
                   ),
                 ),
                 const Divider(),
-                _buildDropdownTile(
-                  "TCP Buffer Size",
-                  "Max window size per connection",
-                  _bufferSize,
-                  ["1m", "2m", "4m", "8m"],
-                  (val) => setState(() => _bufferSize = val!),
-                ),
                 _buildDropdownTile(
                   "Log Level",
                   "Verbosity of logs",

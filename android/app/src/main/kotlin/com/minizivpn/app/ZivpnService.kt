@@ -248,7 +248,6 @@ class ZivpnService : VpnService() {
             val tsLogLevel = when (logLevel) { "debug" -> "debug"; "error" -> "error"; "silent" -> "none"; else -> "info" }
 
             val useUdpgw = prefs.getBoolean("enable_udpgw", true)
-            val udpgwMode = prefs.getString("udpgw_mode", "relay") ?: "relay"
             val udpgwPort = prefs.getString("udpgw_port", "7300") ?: "7300"
 
             val tunCmd = arrayListOf(

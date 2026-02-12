@@ -154,7 +154,6 @@ class MainActivity: FlutterActivity() {
                 
                 // UDPGW Settings
                 val enableUdpgw = call.argument<Boolean>("enable_udpgw") ?: true
-                val udpgwMode = call.argument<String>("udpgw_mode") ?: "relay"
                 val udpgwPort = call.argument<String>("udpgw_port") ?: "7300"
                 val pingInterval = call.argument<Int>("ping_interval") ?: 3
                 val pingTarget = call.argument<String>("ping_target") ?: "http://www.gstatic.com/generate_204"
@@ -166,8 +165,6 @@ class MainActivity: FlutterActivity() {
                 
                 // Advanced Settings
                 val mtu = call.argument<Int>("mtu") ?: 1500
-                val autoTuning = call.argument<Boolean>("auto_tuning") ?: true
-                val bufferSize = call.argument<String>("buffer_size") ?: "4m"
                 val logLevel = call.argument<String>("log_level") ?: "info"
                 val coreCount = call.argument<Int>("core_count") ?: 4
                 val cpuWakelock = call.argument<Boolean>("cpu_wakelock") ?: false
@@ -182,7 +179,6 @@ class MainActivity: FlutterActivity() {
                     .putFloat("multiplier", multiplier.toFloat())
                     .putString("udp_mode", udpMode)
                     .putBoolean("enable_udpgw", enableUdpgw)
-                    .putString("udpgw_mode", udpgwMode)
                     .putString("udpgw_port", udpgwPort)
                     .putInt("ping_interval", pingInterval)
                     .putString("ping_target", pingTarget)
@@ -190,8 +186,6 @@ class MainActivity: FlutterActivity() {
                     .putBoolean("bypass_mode", bypassMode)
                     .putString("apps_list", appsList)
                     .putInt("mtu", mtu)
-                    .putBoolean("auto_tuning", autoTuning)
-                    .putString("buffer_size", bufferSize)
                     .putString("log_level", logLevel)
                     .putInt("core_count", coreCount)
                     .putBoolean("cpu_wakelock", cpuWakelock)
