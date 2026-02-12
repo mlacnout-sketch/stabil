@@ -13,7 +13,7 @@ Future<void> _launchSaweria() async {
 }
 
 // ==========================================
-// 1. BANNER "SI OREN" (DASHBOARD)
+// 1. BANNER "SI OREN" (MODERN & MEME STYLE)
 // ==========================================
 class SiOrenBanner extends StatefulWidget {
   const SiOrenBanner({super.key});
@@ -32,72 +32,101 @@ class _SiOrenBannerState extends State<SiOrenBanner> {
     return Dismissible(
       key: const Key('si_oren_banner'),
       direction: DismissDirection.horizontal,
-      onDismissed: (direction) {
-        setState(() => _isVisible = false);
-      },
+      onDismissed: (direction) => setState(() => _isVisible = false),
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 10),
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF2E2E3E), Color(0xFF1E1E2C)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 4))],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        margin: const EdgeInsets.symmetric(vertical: 12),
+        child: Stack(
           children: [
-            const Row(
-              children: [
-                Icon(Icons.volunteer_activism, color: Colors.orangeAccent, size: 20),
-                SizedBox(width: 8),
-                Text(
-                  "Capek sama Iklan Si Oren?",
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+            // Background Card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF2A2A35), Color(0xFF1F1F28)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-              ],
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.3), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  )
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  const Row(
+                    children: [
+                      Text(
+                        "🐱 CAPEK IKLAN?", 
+                        style: TextStyle(
+                          color: Colors.orangeAccent, 
+                          fontWeight: FontWeight.w900, 
+                          fontSize: 16,
+                          letterSpacing: 1.2
+                        )
+                      ),
+                      Spacer(),
+                      Icon(Icons.close, color: Colors.grey, size: 16),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // Body Text
+                  const Text(
+                    "Daripada buang waktu nonton iklan judi slot 30 detik, mending traktir dev kopi sachet biar update lancar.",
+                    style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Action Buttons
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => setState(() => _isVisible = false),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.grey,
+                          textStyle: const TextStyle(fontSize: 11),
+                        ),
+                        child: const Text("Skip, gw suka buang waktu"),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: _launchSaweria,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orangeAccent,
+                          foregroundColor: Colors.black87,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 4,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        ),
+                        icon: const Icon(Icons.local_cafe_rounded, size: 18),
+                        label: const Text("Traktir Kopi", style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  )
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              "App ini bersih tanpa iklan judi/obat kuat. Support dev biar server tetap ngebut?",
-              style: TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                // TOMBOL NEGATIF (Disamarkan)
-                InkWell(
-                  onTap: () => setState(() => _isVisible = false),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Text(
-                      "Gak, mending balik ke Si Oren",
-                      style: TextStyle(color: Colors.grey, fontSize: 11),
-                    ),
-                  ),
+            
+            // Decorative Circle (Meme Vibe)
+            Positioned(
+              right: -10,
+              top: -10,
+              child: Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.orange.withValues(alpha: 0.1),
                 ),
-                const SizedBox(width: 8),
-                // TOMBOL POSITIF (Menonjol)
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.purpleAccent,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    elevation: 5,
-                  ),
-                  onPressed: () {
-                    _launchSaweria();
-                  },
-                  child: const Text(
-                    "Gas Donasi (Tanpa Iklan) 🚀",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),
@@ -107,84 +136,109 @@ class _SiOrenBannerState extends State<SiOrenBanner> {
 }
 
 // ==========================================
-// 2. DIALOG SARKAS (TRIGGER EVENT)
+// 2. DIALOG SARKAS (FINAL BOSS)
 // ==========================================
 void showSarcasticDialog(BuildContext context, {required VoidCallback onProceed}) {
   showDialog(
     context: context,
-    barrierDismissible: false, // User harus milih
+    barrierDismissible: false,
     builder: (BuildContext context) {
-      return AlertDialog(
-        backgroundColor: const Color(0xFF1E1E2C),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        contentPadding: const EdgeInsets.all(20),
-        
-        // Header
-        title: const Center(
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E2C),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white10),
+            boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 20)],
+          ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.coffee_rounded, size: 40, color: Colors.purpleAccent),
-              SizedBox(height: 10),
-              Text("Koneksi Lancar Jaya?", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              // Header Image/Icon
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                decoration: BoxDecoration(
+                  color: Colors.purpleAccent.withValues(alpha: 0.1),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: const Icon(Icons.volunteer_activism_rounded, size: 56, color: Colors.purpleAccent),
+              ),
+              
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    const Text(
+                      "Wait, Mau Cabut?",
+                      style: TextStyle(
+                        fontSize: 20, 
+                        fontWeight: FontWeight.bold, 
+                        color: Colors.white
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      "Koneksi lancar? Hemat waktu tanpa iklan? \nItu semua murni hasil begadang dev.\n\nMau support biar admin gak tipes ngoding fitur baru?",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white60, 
+                        fontSize: 14, 
+                        height: 1.5
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Main Action (Donasi)
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purpleAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          elevation: 8,
+                          shadowColor: Colors.purpleAccent.withValues(alpha: 0.4),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _launchSaweria();
+                          Future.delayed(const Duration(seconds: 1), onProceed);
+                        },
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text("Support Dev ", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            Icon(Icons.favorite, size: 18),
+                          ],
+                        ),
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 12),
+                    
+                    // Villain Action (Skip)
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        onProceed();
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.grey,
+                      ),
+                      child: const Text(
+                        "Skip, saya tim gratisan sejati",
+                        style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-        
-        // Body Message
-        content: const Text(
-          "Cuma mau ngingetin, app ini gratis murni hasil begadang. Mau traktir kopi biar admin makin semangat update?",
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.white70, fontSize: 13),
-        ),
-        
-        // Tombol Aksi
-        actionsAlignment: MainAxisAlignment.center,
-        actions: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // TOMBOL UTAMA (HERO) - Ungu/Terang
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.purpleAccent,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  shadowColor: Colors.purpleAccent.withValues(alpha: 0.4),
-                  elevation: 8,
-                ),
-                onPressed: () {
-                  Navigator.pop(context);
-                  _launchSaweria();
-                  // Beri jeda dikit buat buka browser sebelum lanjut proses (opsional)
-                  Future.delayed(const Duration(seconds: 1), onProceed);
-                },
-                child: const Text(
-                  "Traktir Kopi Biar Semangat ☕",
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-              ),
-              
-              const SizedBox(height: 12),
-
-              // TOMBOL TOLAK (VILLAIN) - Text Only / Grey
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  onProceed(); // Lanjut disconnect
-                },
-                child: Text(
-                  "Skip, saya hobi nonton iklan 30 detik.", // SARKAS LEVEL MAX
-                  style: TextStyle(
-                    color: Colors.grey[600], 
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic 
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ],
-          )
-        ],
       );
     },
   );

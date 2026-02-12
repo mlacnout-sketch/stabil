@@ -62,15 +62,26 @@ jobs:
         run: |
           flutter build apk --release --target-platform android-arm64
 
+      - name: Create Release Tag
+        id: tag_version
+        run: |
+          VERSION=$(grep 'version:' pubspec.yaml | head -n 1 | awk '{print $2}' | cut -d '+' -f 1)
+          if [ -z "$VERSION" ]; then VERSION="1.0.0"; fi
+          TAG="v$VERSION-b${{ github.run_number }}"
+          echo "VERSION=$TAG" >> $GITHUB_ENV
+          echo "Generated version: $TAG"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: build/app/outputs/flutter-apk/app-release.apk
-          name: ZIVPN Core ${{ github.ref_name }}
+          tag_name: ${{ env.VERSION }}
+          name: ZIVPN xSocks Core ${{ env.VERSION }}
           body: |
             **Automated Release**
-            - Version: ${{ github.ref_name }}
+            - Base Version: ${{ env.VERSION }}
+            - Build ID: ${{ github.run_id }}
             - Built with: Flutter Stable & NDK 27
+          files: build/app/outputs/flutter-apk/app-release.apk
           draft: false
           prerelease: false
         env:
