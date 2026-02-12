@@ -10,9 +10,11 @@ import '../app_colors.dart';
 import 'tabs/dashboard_tab.dart';
 import 'tabs/proxies_tab.dart';
 import 'tabs/logs_tab.dart';
+import 'tabs/autopilot_tab.dart';
 import 'tabs/settings_tab.dart';
 import '../viewmodels/update_viewmodel.dart';
 import '../repositories/backup_repository.dart';
+import '../services/autopilot_service.dart';
 import '../models/app_version.dart';
 import '../models/account.dart';
 
@@ -238,6 +240,8 @@ class _HomePageState extends State<HomePage> {
         _startTimer();
       }
     });
+
+    await AutoPilotService().init();
   }
 
   Future<void> _saveAccounts() async {
@@ -469,6 +473,7 @@ class _HomePageState extends State<HomePage> {
               },
             ),
             LogsTab(logs: _logs, scrollController: _logScrollCtrl),
+            const AutoPilotTab(),
             SettingsTab(
               onCheckUpdate: () async {
               ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -514,6 +519,11 @@ class _HomePageState extends State<HomePage> {
             icon: Icon(Icons.terminal_outlined),
             selectedIcon: Icon(Icons.terminal),
             label: 'Logs',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.radar_outlined),
+            selectedIcon: Icon(Icons.radar),
+            label: 'Auto Pilot',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
