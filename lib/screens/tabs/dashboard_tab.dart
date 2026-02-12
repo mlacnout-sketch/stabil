@@ -9,6 +9,8 @@ class DashboardTab extends StatefulWidget {
   final ValueNotifier<String> dl, ul;
   final ValueNotifier<String> duration;
   final ValueNotifier<int> sessionRx, sessionTx;
+  final bool autoPilotActive;
+  final bool isResetting;
 
   const DashboardTab({
     super.key,
@@ -19,6 +21,8 @@ class DashboardTab extends StatefulWidget {
     required this.duration,
     required this.sessionRx,
     required this.sessionTx,
+    this.autoPilotActive = false,
+    this.isResetting = false,
   });
 
   @override
@@ -164,7 +168,38 @@ class _DashboardTabState extends State<DashboardTab> with SingleTickerProviderSt
                                     );
                                   }
                                 ),
-                              )
+                              ),
+                              if (widget.autoPilotActive) ...[
+                                const SizedBox(height: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: widget.isResetting ? Colors.redAccent : Colors.blueAccent.withValues(alpha: 0.3),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: widget.isResetting ? Colors.red : Colors.blueAccent, width: 0.5),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        widget.isResetting ? Icons.sync : Icons.radar,
+                                        size: 10,
+                                        color: Colors.white,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        widget.isResetting ? "RESETTING" : "MONITORING",
+                                        style: const TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              ]
                             ]
                           ],
                         ),
