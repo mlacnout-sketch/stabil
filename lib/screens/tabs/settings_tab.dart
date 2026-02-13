@@ -6,7 +6,6 @@ import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 import '../../app_colors.dart';
 import '../../repositories/backup_repository.dart';
-import '../../services/autopilot_service.dart';
 import '../app_selector_page.dart';
 
 class SettingsTab extends StatefulWidget {
@@ -35,16 +34,9 @@ class _SettingsTabState extends State<SettingsTab> {
   final _tcpSndBufCtrl = TextEditingController();
   final _tcpWndCtrl = TextEditingController();
   final _socksBufCtrl = TextEditingController();
-  final _maxFailCtrl = TextEditingController();
-  final _airplaneDelayCtrl = TextEditingController();
-  final _recoveryWaitCtrl = TextEditingController();
-  final _pingTimeoutCtrl = TextEditingController();
-  final _stabilizerSizeCtrl = TextEditingController();
 
   bool _cpuWakelock = false;
   bool _enableUdpgw = true;
-  bool _autoReset = false;
-  bool _enableStabilizer = false;
   bool _filterApps = false;
   bool _bypassMode = false;
   String _logLevel = "info";
@@ -52,7 +44,6 @@ class _SettingsTabState extends State<SettingsTab> {
   String _appVersion = "Unknown";
   
   final _backupRepo = BackupRepository();
-  final _autoPilot = AutoPilotService();
 
   @override
   void initState() {
@@ -123,16 +114,9 @@ class _SettingsTabState extends State<SettingsTab> {
       _tcpSndBufCtrl.text = prefs.getString('tcp_snd_buf') ?? "65535";
       _tcpWndCtrl.text = prefs.getString('tcp_wnd') ?? "65535";
       _socksBufCtrl.text = prefs.getString('socks_buf') ?? "65536";
-      _maxFailCtrl.text = (prefs.getInt('max_fail_count') ?? 3).toString();
-      _airplaneDelayCtrl.text = (prefs.getInt('airplane_delay') ?? 2).toString();
-      _recoveryWaitCtrl.text = (prefs.getInt('recovery_wait') ?? 10).toString();
-      _pingTimeoutCtrl.text = (prefs.getInt('ping_timeout') ?? 5).toString();
-      _stabilizerSizeCtrl.text = (prefs.getInt('stabilizer_size') ?? 1).toString();
       
       _cpuWakelock = prefs.getBool('cpu_wakelock') ?? false;
       _enableUdpgw = prefs.getBool('enable_udpgw') ?? true;
-      _autoReset = prefs.getBool('auto_reset') ?? false;
-      _enableStabilizer = prefs.getBool('enable_stabilizer') ?? false;
       _filterApps = prefs.getBool('filter_apps') ?? false;
       _bypassMode = prefs.getBool('bypass_mode') ?? false;
       _logLevel = prefs.getString('log_level') ?? "info";
@@ -155,16 +139,9 @@ class _SettingsTabState extends State<SettingsTab> {
     await prefs.setString('tcp_snd_buf', val(_tcpSndBufCtrl, "65535"));
     await prefs.setString('tcp_wnd', val(_tcpWndCtrl, "65535"));
     await prefs.setString('socks_buf', val(_socksBufCtrl, "65536"));
-    await prefs.setInt('max_fail_count', int.tryParse(val(_maxFailCtrl, "3")) ?? 3);
-    await prefs.setInt('airplane_delay', int.tryParse(val(_airplaneDelayCtrl, "2")) ?? 2);
-    await prefs.setInt('recovery_wait', int.tryParse(val(_recoveryWaitCtrl, "10")) ?? 10);
-    await prefs.setInt('ping_timeout', int.tryParse(val(_pingTimeoutCtrl, "5")) ?? 5);
-    await prefs.setInt('stabilizer_size', int.tryParse(val(_stabilizerSizeCtrl, "1")) ?? 1);
     
     await prefs.setBool('cpu_wakelock', _cpuWakelock);
     await prefs.setBool('enable_udpgw', _enableUdpgw);
-    await prefs.setBool('auto_reset', _autoReset);
-    await prefs.setBool('enable_stabilizer', _enableStabilizer);
     await prefs.setBool('filter_apps', _filterApps);
     await prefs.setBool('bypass_mode', _bypassMode);
     await prefs.setString('log_level', _logLevel);
@@ -172,23 +149,6 @@ class _SettingsTabState extends State<SettingsTab> {
 
     _loadSettings();
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Settings Saved")));
-  }
-
-  Future<void> _handleSignalReset() async {
-    final available = await _autoPilot.isShizukuAvailable();
-    if (!available) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Shizuku is not running.")));
-      return;
-    }
-    final granted = await _autoPilot.checkAndRequestPermission();
-    if (!granted) return;
-
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Resetting signal...")));
-    try {
-      await _autoPilot.manualReset();
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed: $e")));
-    }
   }
 
   @override
@@ -217,47 +177,9 @@ class _SettingsTabState extends State<SettingsTab> {
                   Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: _buildTextInput(_udpgwBufSizeCtrl, "UDP Buffer (Packets)", Icons.shopping_bag)),
                 ],
                 const Divider(),
-                const ListTile(title: Text("Ping & AutoPilot", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
+                const ListTile(title: Text("Ping Config", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
                 Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: _buildTextInput(_pingIntervalCtrl, "Check Interval (sec)", Icons.timer)),
                 Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: _buildTextInput(_pingTargetCtrl, "Target Ping (URL/IP)", Icons.network_check)),
-                ListTile(
-                  leading: const Icon(Icons.signal_cellular_alt_sharp),
-                  title: const Text("Manual Signal Reset"),
-                  subtitle: const Text("Toggle Airplane Mode via Shizuku"),
-                  trailing: const Icon(Icons.refresh, color: AppColors.primary),
-                  onTap: _handleSignalReset,
-                ),
-                ListTile(
-                  leading: const Icon(Icons.security),
-                  title: const Text("Test Shizuku Service"),
-                  onTap: () async {
-                    final available = await _autoPilot.isShizukuAvailable();
-                    if (!available) {
-                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Shizuku NOT Available")));
-                      return;
-                    }
-                    final granted = await _autoPilot.checkAndRequestPermission();
-                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(granted ? "Shizuku Ready" : "Permission Denied")));
-                  },
-                ),
-                SwitchListTile(
-                  title: const Text("Auto Signal Reset"),
-                  value: _autoReset,
-                  onChanged: (val) => setState(() => _autoReset = val),
-                ),
-                if (_autoReset) ...[
-                  Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: _buildTextInput(_maxFailCtrl, "Max Failures", Icons.warning_amber)),
-                  Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: _buildTextInput(_airplaneDelayCtrl, "Airplane Duration (sec)", Icons.timer_off)),
-                  Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: _buildTextInput(_recoveryWaitCtrl, "Recovery Wait (sec)", Icons.hourglass_empty)),
-                  Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: _buildTextInput(_pingTimeoutCtrl, "Ping Timeout (sec)", Icons.timer_10)),
-                  SwitchListTile(
-                    title: const Text("Enable Stabilizer"),
-                    value: _enableStabilizer,
-                    onChanged: (val) => setState(() => _enableStabilizer = val),
-                  ),
-                  if (_enableStabilizer)
-                    Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: _buildTextInput(_stabilizerSizeCtrl, "Stabilizer Size (MB)", Icons.download)),
-                ],
                 const Divider(),
                 const ListTile(title: Text("Apps Filter", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
                 SwitchListTile(
