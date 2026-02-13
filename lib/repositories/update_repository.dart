@@ -3,18 +3,32 @@ import 'dart:io';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../models/app_version.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 class UpdateRepository {
   final String apiUrl = "https://api.github.com/repos/mlacnout-sketch/zivpn-xsocks-core/releases";
 
-  // Strategies for connection: SOCKS (via VPN tunnel), then DIRECT (fallback)
-  // Note: Dart's findProxy expects 'SOCKS host:port', not 'SOCKS5'.
-  static const List<String> _strategies = [
-    "SOCKS 127.0.0.1:7777",
-    "DIRECT"
-  ];
+  Future<List<String>> _getStrategies() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isVpnRunning = prefs.getBool('flutter.vpn_running') ?? false; // Note: Native saves as flutter.vpn_running or vpn_running depending on logic, check both.
+    
+    // Check both potential keys just to be safe (migration consistency)
+    final running = (prefs.getBool('vpn_running') ?? false) || (prefs.getBool('flutter.vpn_running') ?? false);
+
+    if (running) {
+      // If VPN is on, DIRECT connection will likely fail (no quota) or cause issues.
+      // Force SOCKS only.
+      return ["SOCKS 127.0.0.1:7777"];
+    } else {
+      // If VPN is off, try SOCKS (maybe left over?) then DIRECT.
+      // Actually if VPN is off, SOCKS won't work. So DIRECT first.
+      return ["DIRECT", "SOCKS 127.0.0.1:7777"];
+    }
+  }
 
   Future<AppVersion?> fetchUpdate() async {
-    for (final proxy in _strategies) {
+    final strategies = await _getStrategies();
+    for (final proxy in strategies) {
       try {
         print("Checking update via: $proxy");
         final responseBody = await _executeCheck(proxy);
@@ -28,14 +42,14 @@ class UpdateRepository {
   }
 
   Future<File?> downloadUpdate(AppVersion version, File targetFile, Function(double) onProgress) async {
-    for (final proxy in _strategies) {
+    final strategies = await _getStrategies();
+    for (final proxy in strategies) {
       try {
         print("Downloading update via: $proxy");
         await _executeDownload(version.apkUrl, targetFile, proxy, onProgress);
         return targetFile;
       } catch (e) {
         print("Download failed via $proxy: $e");
-        // Clean up partial file if download failed
         if (await targetFile.exists()) {
           try {
              await targetFile.delete();
