@@ -44,12 +44,26 @@ class _SettingsTabState extends State<SettingsTab> {
   String _appVersion = "Unknown";
   
   final _backupRepo = BackupRepository();
-
+  // Using a shared viewmodel logic or passing it would be ideal, but for now we rely on the parent's action or listen to a shared stream.
+  // Actually, since the update logic is triggered by the parent (onCheckUpdate), the progress should ideally be shown by the parent dialog.
+  // BUT, the user requested it HERE. 
+  // Let's implement a listener if we can, or just a simple UI if the parent handles the download UI.
+  // Wait, in HomePage._executeDownload, it shows a Dialog with progress.
+  // So the progress IS already shown in a dialog when 'Update Now' is clicked.
+  // User might want it inline?
+  // Let's assume the user wants to see it IN THE TAB.
+  // But wait, UpdateViewModel is inside HomePage.
+  
   @override
   void initState() {
     super.initState();
     _loadSettings();
     _loadVersion();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 
   Future<void> _openAppSelector() async {
