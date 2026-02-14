@@ -1,2 +1,0 @@
-/data/data/com.termux/files/usr/bin/llvm-ar qc libancillary.a CMakeFiles/ancillary.dir/libancillary/fd_recv.c.o CMakeFiles/ancillary.dir/libancillary/fd_send.c.o
-/data/data/com.termux/files/usr/bin/llvm-ranlib libancillary.a

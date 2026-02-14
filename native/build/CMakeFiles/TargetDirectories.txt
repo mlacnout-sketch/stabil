@@ -1,5 +1,0 @@
-/data/data/com.termux/files/home/workspace/stabil/native/build/CMakeFiles/ancillary.dir
-/data/data/com.termux/files/home/workspace/stabil/native/build/CMakeFiles/tun2socks.dir
-/data/data/com.termux/files/home/workspace/stabil/native/build/CMakeFiles/pdnsd.dir
-/data/data/com.termux/files/home/workspace/stabil/native/build/CMakeFiles/edit_cache.dir
-/data/data/com.termux/files/home/workspace/stabil/native/build/CMakeFiles/rebuild_cache.dir
