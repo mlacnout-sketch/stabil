@@ -4,6 +4,7 @@
 #include <android/log.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <errno.h>
 
@@ -15,6 +16,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <ancillary.h>
 
 
@@ -46,7 +48,21 @@ getABI(JNIEnv *env, jobject thiz) {
 static void
 exec(JNIEnv *env, jobject thiz, jstring cmd) {
     const char *str = env->GetStringUTFChars(cmd, 0);
-    system(str);
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        LOGE("fork failed: %s", strerror(errno));
+    } else if (pid == 0) {
+        // Child process
+        char *argv[] = { (char*)"sh", (char*)"-c", (char*)str, NULL };
+        execvp("sh", argv);
+        _exit(127); // Should not be reached unless execvp fails
+    } else {
+        // Parent process
+        int status;
+        waitpid(pid, &status, 0);
+    }
+
     env->ReleaseStringUTFChars(cmd, str);
 }
 

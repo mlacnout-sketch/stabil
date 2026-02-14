@@ -174,6 +174,14 @@ static void tcp_remove(struct tcp_pcb* pcb_list)
     BReactor_Synchronize(&ss, &sync_mark.base); \
     BPending_Free(&sync_mark);
 
+// --- Memory Pool Implementation ---
+#include <tun2socks/MemoryPool.h>
+
+static MemoryPool client_pool;
+static MemoryPool buf_pool;
+static MemoryPool socks_buf_pool;
+// ----------------------------------
+
 // command-line options
 struct {
     int help;
@@ -482,6 +490,11 @@ int main (int argc, char **argv)
         goto fail1;
     }
 
+    // init memory pools
+    pool_init(&client_pool, sizeof(struct tcp_client));
+    pool_init(&buf_pool, g_tcp_wnd);
+    pool_init(&socks_buf_pool, g_socks_buf_size);
+
     // init time
     BTime_Init();
 
@@ -685,6 +698,10 @@ fail3:
 fail2:
     BReactor_Free(&ss);
 fail1:
+    pool_free_all(&client_pool);
+    pool_free_all(&buf_pool);
+    pool_free_all(&socks_buf_pool);
+
     BFree(password_file_contents);
     BLog(BLOG_NOTICE, "exiting");
     BLog_Free();
@@ -1869,22 +1886,22 @@ err_t listener_accept_func (void *arg, struct tcp_pcb *newpcb, err_t err)
     tcp_accepted(this_listener);
 
     // allocate client structure
-    struct tcp_client *client = (struct tcp_client *)malloc(sizeof(*client));
+    struct tcp_client *client = (struct tcp_client *)pool_alloc(&client_pool);
     if (!client) {
-        BLog(BLOG_ERROR, "listener accept: malloc failed");
+        BLog(BLOG_ERROR, "listener accept: pool_alloc failed");
         goto fail0;
     }
-    client->buf = (uint8_t *)malloc(g_tcp_wnd);
+    client->buf = (uint8_t *)pool_alloc(&buf_pool);
     if (!client->buf) {
-        BLog(BLOG_ERROR, "listener accept: malloc failed (buf)");
-        free(client);
+        BLog(BLOG_ERROR, "listener accept: pool_alloc failed (buf)");
+        pool_free(&client_pool, client);
         goto fail0;
     }
-    client->socks_recv_buf = (uint8_t *)malloc(g_socks_buf_size);
+    client->socks_recv_buf = (uint8_t *)pool_alloc(&socks_buf_pool);
     if (!client->socks_recv_buf) {
-        BLog(BLOG_ERROR, "listener accept: malloc failed (socks_recv_buf)");
-        free(client->buf);
-        free(client);
+        BLog(BLOG_ERROR, "listener accept: pool_alloc failed (socks_recv_buf)");
+        pool_free(&buf_pool, client->buf);
+        pool_free(&client_pool, client);
         goto fail0;
     }
     client->socks_username = NULL;
@@ -1969,9 +1986,9 @@ err_t listener_accept_func (void *arg, struct tcp_pcb *newpcb, err_t err)
 fail1:
     SYNC_BREAK
     free(client->socks_username);
-    free(client->buf);
-    free(client->socks_recv_buf);
-    free(client);
+    pool_free(&buf_pool, client->buf);
+    pool_free(&socks_buf_pool, client->socks_recv_buf);
+    pool_free(&client_pool, client);
 fail0:
     return ERR_MEM;
 }
@@ -2113,9 +2130,9 @@ void client_dealloc (struct tcp_client *client)
 
     // free memory
     free(client->socks_username);
-    free(client->buf);
-    free(client->socks_recv_buf);
-    free(client);
+    pool_free(&buf_pool, client->buf);
+    pool_free(&socks_buf_pool, client->socks_recv_buf);
+    pool_free(&client_pool, client);
 }
 
 void client_err_func (void *arg, err_t err)

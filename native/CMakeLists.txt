@@ -70,6 +70,7 @@ set(BADVPN_SOURCES
     badvpn/flowextra/PacketPassInactivityMonitor.c
     badvpn/tun2socks/SocksUdpGwClient.c
     badvpn/udpgw_client/UdpGwClient.c
+    badvpn/tun2socks/MemoryPool.c
 )
 
 add_executable(tun2socks ${BADVPN_SOURCES})
@@ -100,14 +101,37 @@ target_include_directories(tun2socks PRIVATE
 )
 
 target_link_libraries(tun2socks ancillary log dl)
-target_compile_options(tun2socks PRIVATE 
-    -O3
-    -Wno-parentheses
-    -Wno-pointer-sign
-    -Wno-unused-value
-    -Wno-unused-label
-    -Wno-unused-variable
-)
+
+# Optimization flags
+if(ANDROID)
+    target_compile_options(tun2socks PRIVATE
+        -O3
+        -flto
+        -ffast-math
+        -funroll-loops
+        -fvisibility=hidden
+        -fomit-frame-pointer
+    )
+
+    # Link-time optimization
+    target_link_options(tun2socks PRIVATE -flto -Wl,--strip-all)
+
+    # Architecture specific optimizations
+    if(ANDROID_ABI STREQUAL "arm64-v8a")
+        target_compile_options(tun2socks PRIVATE -march=armv8-a+crypto)
+    elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
+        target_compile_options(tun2socks PRIVATE -mfpu=neon -mfloat-abi=softfp)
+    endif()
+else()
+    target_compile_options(tun2socks PRIVATE
+        -O3
+        -Wno-parentheses
+        -Wno-pointer-sign
+        -Wno-unused-value
+        -Wno-unused-label
+        -Wno-unused-variable
+    )
+endif()
 
 if(NOT SKIP_JNI_CHECK)
     # --- system (JNI) ---
