@@ -173,8 +173,9 @@ set_target_properties(pdnsd PROPERTIES SUFFIX ".so")
 set_target_properties(pdnsd PROPERTIES PREFIX "lib")
 target_compile_options(pdnsd PRIVATE 
     -Wall -O3 
+    -DNDEBUG
     -Wno-deprecated-declarations 
-    -Wno-unused-variable 
+    -Wno-unused-variable  
     -Wno-string-plus-int
     -Wno-gnu-designator
 )
