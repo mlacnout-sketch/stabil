@@ -6,6 +6,11 @@ option(TUN2SOCKS_ENABLE_LTO "Enable link-time optimization for tun2socks" ON)
 option(TUN2SOCKS_ENABLE_CPU_TUNING "Enable ABI-specific CPU tuning flags" OFF)
 option(TUN2SOCKS_ENABLE_FRAME_POINTER "Keep frame pointers for profiling" ON)
 option(TUN2SOCKS_ENABLE_PERF_TELEMETRY "Enable tun2socks perf telemetry instrumentation" ON)
+option(TUN2SOCKS_BUILD_PERF_HARNESS "Build native perf harness target" OFF)
+
+if(NOT ANDROID)
+    set(TUN2SOCKS_BUILD_PERF_HARNESS ON CACHE BOOL "Build native perf harness target" FORCE)
+endif()
 
 # --- libancillary ---
 add_library(ancillary STATIC
@@ -179,17 +184,19 @@ if(NOT SKIP_JNI_CHECK)
 endif()
 
 
-add_executable(tun2socks_perf_harness
-    perf/tun2socks_perf_harness.cpp
-    badvpn/tun2socks/MemoryPool.c
-)
-target_include_directories(tun2socks_perf_harness PRIVATE
-    badvpn
-    badvpn/tun2socks
-)
-target_link_libraries(tun2socks_perf_harness pthread)
-if(TUN2SOCKS_ENABLE_FRAME_POINTER)
-    target_compile_options(tun2socks_perf_harness PRIVATE -fno-omit-frame-pointer)
+if(TUN2SOCKS_BUILD_PERF_HARNESS)
+    add_executable(tun2socks_perf_harness
+        perf/tun2socks_perf_harness.cpp
+        badvpn/tun2socks/MemoryPool.c
+    )
+    target_include_directories(tun2socks_perf_harness PRIVATE
+        badvpn
+        badvpn/tun2socks
+    )
+    target_link_libraries(tun2socks_perf_harness pthread)
+    if(TUN2SOCKS_ENABLE_FRAME_POINTER)
+        target_compile_options(tun2socks_perf_harness PRIVATE -fno-omit-frame-pointer)
+    endif()
 endif()
 
 # --- pdnsd ---
